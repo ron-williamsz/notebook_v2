@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Notebook Zang — Skills{% endblock %}
+
+{% block navbar_actions %}
+<a href="/" class="btn btn-outlined btn-sm">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+    </svg>
+    <span class="btn-label-mobile-hide">Notebooks</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <div class="admin-header">
+        <h1>Skills</h1>
+        <div style="display:flex; gap:8px">
+            <label class="btn btn-outlined btn-sm" style="cursor:pointer">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                Importar
+                <input type="file" accept=".zip" style="display:none" onchange="importSkillFile(event)">
+            </label>
+            <button class="btn btn-primary btn-sm" onclick="location.href='/admin/skills/new'">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Nova Skill
+            </button>
+        </div>
+    </div>
+
+    <div class="skill-admin-grid" id="skill-grid">
+        <!-- Preenchido por JS -->
+    </div>
+
+    <div class="empty-state hidden" id="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4; margin-bottom:12px">
+            <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24A2.5 2.5 0 0 1 9.5 2z"/>
+            <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2z"/>
+        </svg>
+        <p>Nenhuma skill criada.</p>
+        <p style="font-size:0.8rem; margin-top:4px">Crie skills para definir roteiros de análise que o LLM vai executar.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', path='js/admin/skill_editor.js') }}?v=5"></script>
+<script>
+async function importSkillFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const resp = await fetch('/api/v1/skills/import', { method: 'POST', body: formData });
+        if (resp.ok) {
+            const skill = await resp.json();
+            Utils.toast('Skill importada com sucesso!', 'success');
+            location.href = '/admin/skills/' + skill.id;
+        } else {
+            const err = await resp.json();
+            Utils.toast(err.detail || 'Erro ao importar', 'error');
+        }
+    } catch (e) {
+        Utils.toast('Erro ao importar: ' + e.message, 'error');
+    }
+    event.target.value = '';
+}
+
+async function deleteSkill(id, name) {
+    if (!confirm(`Excluir a skill "${name}"?`)) return;
+    try {
+        await API.request('DELETE', `/skills/${id}`);
+        Utils.toast('Skill excluída', 'success');
+        document.querySelector(`.skill-admin-card[onclick*="/${id}"]`)?.remove();
+        const grid = document.getElementById('skill-grid');
+        if (!grid.children.length) document.getElementById('empty-state').classList.remove('hidden');
+    } catch (e) {
+        Utils.toast('Erro ao excluir: ' + e.message, 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const skills = await API.request('GET', '/skills');
+    const grid = document.getElementById('skill-grid');
+    const empty = document.getElementById('empty-state');
+
+    if (!skills.length) {
+        empty.classList.remove('hidden');
+        return;
+    }
+
+    grid.innerHTML = skills.map(s => `
+        <div class="skill-admin-card" onclick="location.href='/admin/skills/${s.id}'">
+            <div class="skill-admin-card-header">
+                <span class="skill-admin-card-icon">${s.icon}</span>
+                <span class="skill-admin-card-name">${s.name}</span>
+                <button class="btn-icon btn-ghost skill-admin-delete" onclick="event.stopPropagation(); deleteSkill(${s.id}, '${Utils.escapeHtml(s.name)}')" title="Excluir skill">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14H7L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="skill-admin-card-desc">${s.description || 'Sem descrição'}</div>
+            <div class="skill-admin-card-meta">
+                <span class="skill-status-badge ${s.is_active ? 'active' : 'inactive'}">
+                    ${s.is_active ? 'Ativa' : 'Inativa'}
+                </span>
+            </div>
+        </div>
+    `).join('');
+});
+</script>
+{% endblock %}

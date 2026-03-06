@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Notebook Zang — Editor de Skill{% endblock %}
+
+{% block navbar_actions %}
+<a href="/admin/skills" class="btn btn-outlined btn-sm">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="m15 18-6-6 6-6"/>
+    </svg>
+    <span class="btn-label-mobile-hide">Voltar</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="admin-page">
+    <div class="admin-header">
+        <h1 id="page-title">Nova Skill</h1>
+        <div style="display:flex; gap:8px">
+            <button class="btn btn-outlined btn-sm hidden" id="btn-export" onclick="SkillEditor.exportSkill()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Exportar
+            </button>
+            <button class="btn btn-danger btn-sm hidden" id="btn-delete" onclick="SkillEditor.deleteSkill()">Excluir</button>
+            <button class="btn btn-primary btn-sm" id="btn-save" onclick="SkillEditor.save()">Salvar Skill</button>
+        </div>
+    </div>
+
+    <div class="skill-editor">
+        <!-- Info Básica -->
+        <div class="skill-editor-section">
+            <h3>Informações</h3>
+            <div class="skill-editor-row" style="display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+                <div class="form-group" style="width:60px">
+                    <label>Ícone</label>
+                    <input type="text" class="input" id="skill-icon" value="📋" maxlength="4" style="text-align:center; font-size:1.5rem; padding:6px;">
+                </div>
+                <div class="form-group" style="width:90px">
+                    <label>Cor</label>
+                    <input type="color" id="skill-color" value="#6366f1" style="width:100%; height:42px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--bg-input); cursor:pointer;">
+                </div>
+                <div class="form-group" style="flex:1; min-width:0;">
+                    <label>Nome</label>
+                    <input type="text" class="input" id="skill-name" placeholder="Ex: Análise de Prestação de Contas">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Descrição curta</label>
+                <input type="text" class="input" id="skill-desc" placeholder="Ex: Analisa documentos de prestação de contas de condomínios">
+            </div>
+        </div>
+
+        <!-- Instrução Macro -->
+        <div class="skill-editor-section">
+            <h3>Instrução Macro</h3>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+                Instrução geral que define o papel e objetivo do LLM ao executar esta skill.
+            </p>
+            <textarea class="input" id="skill-macro" rows="6" placeholder="Você é um especialista em análise contábil de condomínios. Seu objetivo é verificar se os documentos estão corretos..."></textarea>
+        </div>
+
+        <!-- Etapas -->
+        <div class="skill-editor-section">
+            <h3>Etapas Específicas</h3>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+                Defina as etapas que o LLM deve seguir ao executar a análise.
+            </p>
+            <div id="steps-list">
+                <!-- Preenchido por JS -->
+            </div>
+            <button class="btn btn-outlined btn-sm" onclick="SkillEditor.addStep()" style="margin-top:8px">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Adicionar Etapa
+            </button>
+        </div>
+
+        <!-- Fonte de Dados GoSATI -->
+        <div class="skill-editor-section">
+            <h3>Fonte de Dados GoSATI</h3>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+                Configure a consulta automática ao GoSATI quando esta skill for executada.
+            </p>
+            <div style="margin-bottom:12px;">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="gosati-enabled" onchange="SkillEditor.toggleGosati()">
+                    <span>Consultar GoSATI automaticamente</span>
+                </label>
+            </div>
+            <div id="gosati-config" style="display:none;">
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem; font-weight:500; margin-bottom:6px; display:block;">Seções SOAP</label>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                        <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" class="gosati-section" value="despesas"> Despesas
+                        </label>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" class="gosati-section" value="receitas"> Receitas
+                        </label>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" class="gosati-section" value="contas"> Contas
+                        </label>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" class="gosati-section" value="devedores"> Devedores
+                        </label>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" class="gosati-section" value="cobranca"> Cobrança
+                        </label>
+                        <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem; cursor:pointer;">
+                            <input type="checkbox" class="gosati-section" value="orcado_gasto"> Orçado/Gasto
+                        </label>
+                    </div>
+                </div>
+                <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:10px;">
+                    Filtros opcionais — lógica OU: basta dar match em qualquer campo para incluir o lançamento.
+                </p>
+                <div class="form-group">
+                    <label>Filtro por conta de despesa</label>
+                    <input type="text" class="input" id="gosati-filter-conta-despesas"
+                           placeholder="DESPESAS COM PESSOAL, DESPESAS ADMINISTRATIVAS">
+                </div>
+                <div class="form-group">
+                    <label>Filtro por sub-conta</label>
+                    <input type="text" class="input" id="gosati-filter-subconta"
+                           placeholder="FOLHA DE PAGAMENTO, COPIAS, FGTS">
+                </div>
+                <div class="form-group">
+                    <label>Filtro por histórico</label>
+                    <input type="text" class="input" id="gosati-filter-historico"
+                           placeholder="FOLHA DE PAGTO, DESPESAS COM CÓPIAS">
+                </div>
+                <div style="margin-top:12px; padding:12px; border:1px solid var(--border); border-radius:var(--radius-sm);">
+                    <label style="font-size:0.85rem; font-weight:500; margin-bottom:8px; display:block;">Consultar contas disponíveis</label>
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;">
+                        Consulte o GoSATI para ver quais contas existem. Clique para adicionar ao filtro.
+                    </p>
+                    <div style="display:flex; gap:8px; align-items:end; flex-wrap:wrap; margin-bottom:8px;">
+                        <div style="width:100px;">
+                            <label style="font-size:0.8rem;">Condomínio</label>
+                            <input type="number" class="input" id="browse-condominio"
+                                   value="{{ cond_codigo or '' }}" placeholder="Código">
+                        </div>
+                        <div style="width:70px;">
+                            <label style="font-size:0.8rem;">Mês</label>
+                            <input type="number" class="input" id="browse-mes" min="1" max="12" placeholder="MM">
+                        </div>
+                        <div style="width:80px;">
+                            <label style="font-size:0.8rem;">Ano</label>
+                            <input type="number" class="input" id="browse-ano" min="2000" max="2100" placeholder="AAAA">
+                        </div>
+                        <button class="btn btn-outlined btn-sm" onclick="SkillEditor.browseAccounts()" id="btn-browse-accounts">
+                            Consultar
+                        </button>
+                    </div>
+                    <div id="browse-accounts-result" style="display:none; max-height:300px; overflow-y:auto; font-size:0.85rem;">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Exemplos -->
+        <div class="skill-editor-section">
+            <h3>Arquivos de Exemplo</h3>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+                Envie arquivos que sirvam de referência para o LLM entender o formato dos dados.
+            </p>
+            <div id="examples-list">
+                <!-- Preenchido por JS -->
+            </div>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+                <input type="file" id="example-file" style="display:none" onchange="SkillEditor.exampleFileSelected(event)">
+                <button class="btn btn-outlined btn-sm" onclick="document.getElementById('example-file').click()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    Upload Exemplo
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>window.SKILL_ID = {{ skill_id }};</script>
+<script src="{{ url_for('static', path='js/admin/skill_editor.js') }}?v=6"></script>
+{% endblock %}

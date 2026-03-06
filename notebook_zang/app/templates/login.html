@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Notebook Zang</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}?v=6">
+    <style>
+        .login-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .login-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: var(--shadow-lg);
+        }
+        .login-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 32px;
+            color: var(--text-primary);
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+        .login-logo svg {
+            width: 32px;
+            height: 32px;
+            color: var(--accent);
+        }
+        .login-title {
+            text-align: center;
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            font-weight: 400;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-family: var(--font-sans);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            border-color: var(--accent);
+        }
+        .form-group input::placeholder {
+            color: var(--text-muted);
+        }
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            color: var(--text-on-accent);
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.95rem;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 8px;
+        }
+        .login-btn:hover:not(:disabled) {
+            background: var(--accent-hover);
+        }
+        .login-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .login-error {
+            background: rgba(242, 139, 130, 0.1);
+            border: 1px solid var(--error);
+            color: var(--error);
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .login-success {
+            background: rgba(129, 201, 149, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .login-link {
+            display: block;
+            text-align: center;
+            margin-top: 16px;
+            font-size: 0.85rem;
+            color: var(--accent);
+            cursor: pointer;
+        }
+        .login-link:hover {
+            color: var(--accent-hover);
+        }
+        .form-section {
+            display: none;
+        }
+        .form-section.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="login-logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                Notebook Zang
+            </div>
+
+            <div id="login-error" class="login-error"></div>
+            <div id="login-success" class="login-success"></div>
+
+            <!-- LOGIN FORM -->
+            <div id="section-login" class="form-section active">
+                <p class="login-title">Entre com sua conta BD FOR ALL</p>
+                <form onsubmit="LoginPage.doLogin(event)">
+                    <div class="form-group">
+                        <label for="login-email">Email</label>
+                        <input type="email" id="login-email" placeholder="seu@email.com" required autofocus>
+                    </div>
+                    <div class="form-group">
+                        <label for="login-senha">Senha</label>
+                        <input type="password" id="login-senha" placeholder="Sua senha" required>
+                    </div>
+                    <button type="submit" class="login-btn" id="btn-login">Entrar</button>
+                </form>
+                <a class="login-link" onclick="LoginPage.showSection('forgot')">Esqueci minha senha</a>
+            </div>
+
+            <!-- FORGOT PASSWORD FORM -->
+            <div id="section-forgot" class="form-section">
+                <p class="login-title">Recuperar senha</p>
+                <form onsubmit="LoginPage.doForgot(event)">
+                    <div class="form-group">
+                        <label for="forgot-email">Email</label>
+                        <input type="email" id="forgot-email" placeholder="seu@email.com" required>
+                    </div>
+                    <button type="submit" class="login-btn" id="btn-forgot">Enviar recuperação</button>
+                </form>
+                <a class="login-link" onclick="LoginPage.showSection('login')">Voltar ao login</a>
+            </div>
+
+            <!-- CHANGE PASSWORD FORM (senha temporária) -->
+            <div id="section-change" class="form-section">
+                <p class="login-title">Sua senha é temporária. Crie uma nova senha.</p>
+                <form onsubmit="LoginPage.doChangePassword(event)">
+                    <div class="form-group">
+                        <label for="change-atual">Senha atual (temporária)</label>
+                        <input type="password" id="change-atual" placeholder="Senha atual" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="change-nova">Nova senha</label>
+                        <input type="password" id="change-nova" placeholder="Nova senha" required>
+                    </div>
+                    <button type="submit" class="login-btn" id="btn-change">Alterar senha</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container"></div>
+    <script src="{{ url_for('static', path='js/utils.js') }}?v=3"></script>
+
+    <script>
+    window.LoginPage = {
+        showSection(name) {
+            document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+            document.getElementById(`section-${name}`).classList.add('active');
+            this.clearMessages();
+        },
+
+        showError(msg) {
+            const el = document.getElementById('login-error');
+            el.textContent = msg;
+            el.style.display = 'block';
+            document.getElementById('login-success').style.display = 'none';
+        },
+
+        showSuccess(msg) {
+            const el = document.getElementById('login-success');
+            el.textContent = msg;
+            el.style.display = 'block';
+            document.getElementById('login-error').style.display = 'none';
+        },
+
+        clearMessages() {
+            document.getElementById('login-error').style.display = 'none';
+            document.getElementById('login-success').style.display = 'none';
+        },
+
+        async doLogin(e) {
+            e.preventDefault();
+            this.clearMessages();
+            const btn = document.getElementById('btn-login');
+            btn.disabled = true;
+            btn.textContent = 'Entrando...';
+
+            try {
+                const resp = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: document.getElementById('login-email').value.trim(),
+                        senha: document.getElementById('login-senha').value,
+                    }),
+                });
+
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    this.showError(data.detail || data.error || 'Erro ao fazer login');
+                    return;
+                }
+
+                if (data.senha_temporaria) {
+                    // Fill current password and show change form
+                    document.getElementById('change-atual').value = document.getElementById('login-senha').value;
+                    this.showSection('change');
+                    this.showSuccess('Login realizado, mas sua senha é temporária. Crie uma nova senha.');
+                    return;
+                }
+
+                // Success — redirect to dashboard
+                window.location.href = '/';
+            } catch (err) {
+                this.showError('Erro de conexão: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Entrar';
+            }
+        },
+
+        async doForgot(e) {
+            e.preventDefault();
+            this.clearMessages();
+            const btn = document.getElementById('btn-forgot');
+            btn.disabled = true;
+            btn.textContent = 'Enviando...';
+
+            try {
+                const resp = await fetch('/api/v1/auth/forgot-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: document.getElementById('forgot-email').value.trim(),
+                    }),
+                });
+
+                const data = await resp.json();
+                if (!resp.ok) {
+                    this.showError(data.detail || data.error || 'Erro ao enviar');
+                    return;
+                }
+                this.showSuccess('Se o email existir no sistema, as instruções de recuperação foram enviadas.');
+            } catch (err) {
+                this.showError('Erro de conexão: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Enviar recuperação';
+            }
+        },
+
+        async doChangePassword(e) {
+            e.preventDefault();
+            this.clearMessages();
+            const btn = document.getElementById('btn-change');
+            btn.disabled = true;
+            btn.textContent = 'Alterando...';
+
+            try {
+                const resp = await fetch('/api/v1/auth/change-password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        senha_atual: document.getElementById('change-atual').value,
+                        nova_senha: document.getElementById('change-nova').value,
+                    }),
+                });
+
+                const data = await resp.json();
+                if (!resp.ok) {
+                    this.showError(data.detail || data.error || 'Erro ao alterar senha');
+                    return;
+                }
+
+                this.showSuccess('Senha alterada com sucesso! Redirecionando...');
+                setTimeout(() => { window.location.href = '/'; }, 1500);
+            } catch (err) {
+                this.showError('Erro de conexão: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Alterar senha';
+            }
+        },
+    };
+    </script>
+</body>
+</html>

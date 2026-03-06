@@ -1,0 +1,45 @@
+<div class="panel-header" style="display:flex; flex-direction:column; gap:4px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2>Etapas</h2>
+        <div class="period-selector" style="display:flex; align-items:center; gap:6px;">
+            <select class="input" id="etapas-mes" style="width:auto; padding:4px 8px; font-size:0.8rem;">
+                <option value="">Mês</option>
+                <option value="1">Jan</option>
+                <option value="2">Fev</option>
+                <option value="3">Mar</option>
+                <option value="4">Abr</option>
+                <option value="5">Mai</option>
+                <option value="6">Jun</option>
+                <option value="7">Jul</option>
+                <option value="8">Ago</option>
+                <option value="9">Set</option>
+                <option value="10">Out</option>
+                <option value="11">Nov</option>
+                <option value="12">Dez</option>
+            </select>
+            <input type="number" class="input" id="etapas-ano" placeholder="Ano"
+                   min="2020" max="2030"
+                   style="width:70px; padding:4px 8px; font-size:0.8rem;">
+        </div>
+    </div>
+    <span class="etapas-cond-label" id="etapas-cond-label" style="font-size:0.78rem; color:var(--text-muted);"></span>
+</div>
+
+<!-- Etapas container -->
+<div class="etapas-container" id="etapas-container">
+    <!-- Estado vazio -->
+    <div class="etapas-empty" id="etapas-empty">
+        <div class="etapas-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+                <rect x="9" y="3" width="6" height="4" rx="2"/>
+                <path d="M9 14l2 2 4-4"/>
+            </svg>
+        </div>
+        <h2>Nenhuma etapa</h2>
+        <p>Selecione uma Skill no painel direito para criar uma etapa de análise.</p>
+    </div>
+
+    <!-- Cards serão renderizados aqui pelo JS -->
+    <div id="etapas-list"></div>
+</div>

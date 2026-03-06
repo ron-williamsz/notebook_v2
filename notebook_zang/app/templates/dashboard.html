@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Notebook Zang — Dashboard{% endblock %}
+
+{% block navbar_actions %}
+<a href="/admin/skills" class="btn btn-outlined btn-sm">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
+    </svg>
+    <span class="btn-label-mobile-hide">Configurações</span>
+</a>
+<button class="btn btn-primary btn-sm" onclick="Dashboard.showCreateModal()">
+    + Criar novo
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <div class="dashboard-tabs">
+        <button class="dashboard-tab active">Todos</button>
+        <button class="dashboard-tab">Meus notebooks</button>
+    </div>
+
+    <div class="dashboard-header">
+        <h1 id="section-title">Meus notebooks</h1>
+    </div>
+
+    <div class="notebook-grid" id="notebook-grid">
+        <!-- Cards preenchidos por JS -->
+    </div>
+
+    <div class="empty-state hidden" id="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4; margin-bottom:12px">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        <p>Nenhum notebook ainda.</p>
+        <p style="font-size:0.8rem; margin-top:4px">Clique em "Criar novo" para começar.</p>
+    </div>
+</div>
+
+<!-- Modal Criar Notebook -->
+<dialog class="modal" id="create-modal">
+    <h2>Criar notebook</h2>
+    <div class="form-group">
+        <label for="notebook-title">Nome do notebook</label>
+        <input type="text" class="input" id="notebook-title" placeholder="Ex: Análise Condomínio Fev/2026" autofocus>
+    </div>
+    <div class="form-group" style="position:relative;">
+        <label for="create-cond-search">Condomínio</label>
+        <input type="text" class="input" id="create-cond-search"
+               placeholder="Digite código ou nome..." autocomplete="off">
+        <input type="hidden" id="create-cond-codigo">
+        <input type="hidden" id="create-cond-nome">
+        <div class="autocomplete-list hidden" id="create-cond-list"></div>
+    </div>
+    <div class="form-group" style="display:flex; gap:12px;">
+        <div style="flex:1;">
+            <label for="create-mes">Mês</label>
+            <select class="input" id="create-mes">
+                <option value="">Selecione</option>
+                <option value="1">Janeiro</option>
+                <option value="2">Fevereiro</option>
+                <option value="3">Março</option>
+                <option value="4">Abril</option>
+                <option value="5">Maio</option>
+                <option value="6">Junho</option>
+                <option value="7">Julho</option>
+                <option value="8">Agosto</option>
+                <option value="9">Setembro</option>
+                <option value="10">Outubro</option>
+                <option value="11">Novembro</option>
+                <option value="12">Dezembro</option>
+            </select>
+        </div>
+        <div style="flex:1;">
+            <label for="create-ano">Ano</label>
+            <input type="number" class="input" id="create-ano" placeholder="2026" min="2020" max="2030">
+        </div>
+    </div>
+    <div class="modal-actions">
+        <button class="btn btn-outlined btn-sm" onclick="document.getElementById('create-modal').close()">Cancelar</button>
+        <button class="btn btn-primary btn-sm" onclick="Dashboard.createNotebook()">Criar</button>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', path='js/dashboard.js') }}"></script>
+{% endblock %}

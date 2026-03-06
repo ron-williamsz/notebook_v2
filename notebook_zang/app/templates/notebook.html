@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Notebook Zang{% endblock %}
+
+{% block navbar_center %}
+<span class="navbar-title" id="notebook-title">Carregando...</span>
+{% endblock %}
+
+{% block navbar_actions %}
+<a href="/admin/skills" class="btn btn-outlined btn-sm">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
+    </svg>
+    <span class="btn-label-mobile-hide">Configurações</span>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="notebook-view">
+    <!-- ===== PAINEL CENTRAL: Etapas ===== -->
+    <div class="panel panel-chat" id="panel-chat">
+        {% include "components/_etapas_panel.html" %}
+    </div>
+
+    <!-- ===== PAINEL DIREITO: Skills (Estúdio) ===== -->
+    <div class="panel panel-skills" id="panel-skills">
+        {% include "components/_skill_cards.html" %}
+    </div>
+</div>
+
+<!-- Viewer de documentos -->
+<div class="doc-viewer-overlay hidden" id="doc-viewer-overlay" onclick="Etapas.closeViewer(event)">
+    <div class="doc-viewer-modal">
+        <div class="doc-viewer-header">
+            <span class="doc-viewer-title" id="doc-viewer-title"></span>
+            <button onclick="Etapas.closeViewer()" class="doc-viewer-close">&times;</button>
+        </div>
+        <div class="doc-viewer-body" id="doc-viewer-body"></div>
+    </div>
+</div>
+
+<!-- Mobile bottom tab bar -->
+<nav class="mobile-tab-bar" id="mobile-tab-bar">
+    <button class="mobile-tab active" data-panel="panel-chat">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+            <rect x="9" y="3" width="6" height="4" rx="2"/>
+            <path d="M9 14l2 2 4-4"/>
+        </svg>
+        <span>Etapas</span>
+    </button>
+    <button class="mobile-tab" data-panel="panel-skills">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24A2.5 2.5 0 0 1 9.5 2z"/>
+            <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2z"/>
+        </svg>
+        <span>Skills</span>
+    </button>
+</nav>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>window.SESSION_ID = {{ session_id }};</script>
+<script src="{{ url_for('static', path='js/etapas.js') }}?v=7"></script>
+<script src="{{ url_for('static', path='js/skills.js') }}?v=6"></script>
+<script src="{{ url_for('static', path='js/notebook.js') }}?v=8"></script>
+{% endblock %}

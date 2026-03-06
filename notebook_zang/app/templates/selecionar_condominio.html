@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Selecione o condomínio — Notebook Zang{% endblock %}
+
+{% block navbar_actions %}{% endblock %}
+
+{% block content %}
+<style>
+    .cond-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: calc(100vh - var(--navbar-h));
+        padding: 20px;
+    }
+    .cond-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 40px;
+        width: 100%;
+        max-width: 500px;
+        box-shadow: var(--shadow-lg);
+        text-align: center;
+    }
+    .cond-logo {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 32px;
+        color: var(--text-primary);
+        font-size: 1.4rem;
+        font-weight: 600;
+    }
+    .cond-logo svg {
+        width: 32px;
+        height: 32px;
+        color: var(--accent);
+    }
+    .cond-title {
+        text-align: center;
+        font-size: 1.1rem;
+        color: var(--text-secondary);
+        margin-bottom: 24px;
+        font-weight: 400;
+    }
+    .cond-form-group {
+        position: relative;
+        margin-bottom: 16px;
+        text-align: left;
+    }
+    .cond-form-group label {
+        display: block;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+        font-weight: 500;
+    }
+    .cond-form-group input {
+        width: 100%;
+        padding: 10px 14px;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-size: 0.95rem;
+        font-family: var(--font-sans);
+        outline: none;
+        transition: border-color 0.2s;
+    }
+    .cond-form-group input:focus {
+        border-color: var(--accent);
+    }
+    .cond-form-group input::placeholder {
+        color: var(--text-muted);
+    }
+    .cond-btn {
+        width: 100%;
+        padding: 12px;
+        background: var(--accent);
+        color: var(--text-on-accent);
+        border: none;
+        border-radius: var(--radius-sm);
+        font-size: 0.95rem;
+        font-weight: 600;
+        font-family: var(--font-sans);
+        cursor: pointer;
+        transition: background 0.2s;
+        margin-top: 8px;
+    }
+    .cond-btn:hover:not(:disabled) {
+        background: var(--accent-hover);
+    }
+    .cond-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+</style>
+
+<div class="cond-wrapper">
+    <div class="cond-card">
+        <div class="cond-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            Notebook Zang
+        </div>
+
+        <p class="cond-title">Selecione o condomínio</p>
+
+        <div class="cond-form-group">
+            <label for="cond-search">Condomínio</label>
+            <input type="text" id="cond-search"
+                   placeholder="Digite código ou nome..."
+                   autocomplete="off"
+                   {% if cond_codigo %}value="{{ cond_codigo }} — {{ cond_nome }}"{% endif %}
+                   autofocus>
+            <input type="hidden" id="cond-codigo" {% if cond_codigo %}value="{{ cond_codigo }}"{% endif %}>
+            <div class="autocomplete-list hidden" id="cond-list"></div>
+        </div>
+
+        <button class="cond-btn" id="btn-continuar" {% if not cond_codigo %}disabled{% endif %}>Continuar</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', path='js/cond_selector.js') }}?v=1"></script>
+{% endblock %}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Notebook Zang{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}?v=6">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            Notebook Zang
+        </a>
+
+        {% block navbar_center %}{% endblock %}
+
+        <div class="navbar-actions">
+            {% block navbar_actions %}
+            <a href="/admin/skills" class="btn btn-outlined btn-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m-7-3.5 5.2-3m1.6-3L17 1m-12.5 3 5.2 3m1.6 3L17 19"/>
+                </svg>
+                <span class="btn-label-mobile-hide">Configurar Skills</span>
+            </a>
+            {% endblock %}
+
+            {% if user_name %}
+            <span class="navbar-user" title="{{ user_name }}">{{ user_name.split(' ')[0] }}</span>
+            <button class="btn btn-ghost btn-sm" onclick="Auth.logout()" title="Sair">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                <span class="btn-label-mobile-hide">Sair</span>
+            </button>
+            {% endif %}
+        </div>
+    </nav>
+
+    <main id="app-main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div id="toast-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="{{ url_for('static', path='js/utils.js') }}?v=3"></script>
+    <script src="{{ url_for('static', path='js/api.js') }}?v=11"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

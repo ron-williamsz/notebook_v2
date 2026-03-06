@@ -1,0 +1,51 @@
+<div class="panel-header">
+    <h2>Skills</h2>
+    <button class="btn-icon btn-ghost" title="Alternar painel">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+        </svg>
+    </button>
+</div>
+
+<div class="panel-body">
+    <!-- Grid de Skills -->
+    <div class="skills-grid" id="skills-grid">
+        <!-- Preenchido por JS -->
+    </div>
+
+    <!-- Botão Executar -->
+    <button class="btn btn-primary skills-execute-btn" id="btn-execute-skills"
+            onclick="Skills.executeSelected()" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        Executar selecionadas
+    </button>
+
+    <!-- Estado vazio -->
+    <div class="skills-empty hidden" id="skills-empty">
+        <div class="skills-empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M12 3v18m-6-6 6 6 6-6M4.2 12.2 12 4l7.8 8.2"/>
+            </svg>
+        </div>
+        <p>Nenhuma skill configurada.</p>
+        <p style="font-size:0.8rem; margin-top:4px">
+            Acesse <a href="/admin/skills">Configurações</a> para criar skills.
+        </p>
+    </div>
+
+    <hr class="skills-separator">
+
+    <!-- Hint -->
+    <div class="skills-hint">
+        <div class="skills-hint-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24A2.5 2.5 0 0 1 9.5 2z"/>
+                <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2z"/>
+            </svg>
+        </div>
+        Selecione as skills desejadas e clique em Executar.
+    </div>
+</div>

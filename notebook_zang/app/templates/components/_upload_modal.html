@@ -1,0 +1,27 @@
+<!-- Upload Modal -->
+<dialog class="modal" id="upload-modal">
+    <h2>Adicionar fontes</h2>
+    <div class="upload-dropzone" id="upload-dropzone"
+         ondragover="Sources.dragOver(event)"
+         ondragleave="Sources.dragLeave(event)"
+         ondrop="Sources.drop(event)"
+         onclick="document.getElementById('file-input').click()">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:8px; opacity:0.5">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p>Arraste arquivos ou clique para selecionar</p>
+        <p class="upload-hint">PDF, TXT, CSV, XLSX, imagens</p>
+    </div>
+    <input type="file" id="file-input" multiple style="display:none" onchange="Sources.filesSelected(event)">
+
+    <div id="upload-file-list" class="hidden" style="margin-top:12px; display:flex; flex-direction:column; gap:6px;">
+        <!-- Lista de arquivos selecionados -->
+    </div>
+
+    <div class="modal-actions">
+        <button class="btn btn-outlined btn-sm" onclick="Sources.closeUploadModal()">Cancelar</button>
+        <button class="btn btn-primary btn-sm" id="btn-upload" onclick="Sources.uploadFiles()" disabled>Fazer upload</button>
+    </div>
+</dialog>
