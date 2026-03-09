@@ -558,6 +558,7 @@ window.SkillEditor = {
                     ['nome_conta_despesas', 'gosati-filter-conta-despesas'],
                     ['nome_sub_conta', 'gosati-filter-subconta'],
                     ['historico', 'gosati-filter-historico'],
+                    ['historico_excluir', 'gosati-filter-historico-excluir'],
                 ];
                 for (const [key, id] of fields) {
                     const vals = f[key] || [];
@@ -582,6 +583,7 @@ window.SkillEditor = {
             ['nome_conta_despesas', 'gosati-filter-conta-despesas'],
             ['nome_sub_conta', 'gosati-filter-subconta'],
             ['historico', 'gosati-filter-historico'],
+            ['historico_excluir', 'gosati-filter-historico-excluir'],
         ];
         for (const [key, id] of fields) {
             const text = document.getElementById(id).value.trim();

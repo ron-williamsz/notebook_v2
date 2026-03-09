@@ -251,6 +251,16 @@ class CriteriaEngine:
 
             # Resolve valor de referência
             ref_value = self._resolve_reference(config.comparar_com, lanc)
+            if not ref_value:
+                results.append(CriterionResult(
+                    lancamento=num,
+                    criterio_nome=criterio_nome,
+                    criterio_tipo="conferencia_conteudo",
+                    documento_tipo=config.buscar_em,
+                    resultado="DIVERGENCIA",
+                    detalhes=f"Nenhum valor de referência fornecido ({config.comparar_com})",
+                ))
+                continue
 
             batch.append({
                 "lancamento": num,

@@ -164,6 +164,12 @@
                     <input type="text" class="input" id="gosati-filter-historico"
                            placeholder="FOLHA DE PAGTO, DESPESAS COM CÓPIAS">
                 </div>
+                <div class="form-group">
+                    <label>Excluir por histórico</label>
+                    <input type="text" class="input" id="gosati-filter-historico-excluir"
+                           placeholder="CSLL/COFINS/PIS, INSS - NF, ISS - NF, IRRF, PIS FOLHA">
+                    <small style="color:var(--text-muted); font-size:0.72rem;">Lançamentos cujo histórico contenha esses termos serão removidos</small>
+                </div>
                 <div style="margin-top:12px; padding:12px; border:1px solid var(--border); border-radius:var(--radius-sm);">
                     <label style="font-size:0.85rem; font-weight:500; margin-bottom:8px; display:block;">Consultar contas disponíveis</label>
                     <p style="font-size:0.75rem; color:var(--text-muted); margin-bottom:8px;">
@@ -219,5 +225,5 @@
 
 {% block extra_scripts %}
 <script>window.SKILL_ID = {{ skill_id }};</script>
-<script src="{{ url_for('static', path='js/admin/skill_editor.js') }}?v=6"></script>
+<script src="{{ url_for('static', path='js/admin/skill_editor.js') }}?v=7"></script>
 {% endblock %}

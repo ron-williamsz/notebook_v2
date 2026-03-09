@@ -815,7 +815,14 @@ class GoSatiService:
             if values:
                 filter_fields[key] = values
 
-        if not filter_fields:
+        # Parse exclusão por histórico (substring match)
+        _exclude_terms: list[str] = []
+        raw_exclude = filters.get("historico_excluir", [])
+        if isinstance(raw_exclude, str):
+            raw_exclude = [raw_exclude]
+        _exclude_terms = [_norm(v) for v in raw_exclude if v.strip()]
+
+        if not filter_fields and not _exclude_terms:
             return data
 
         # nome_sub_conta e nome_conta_despesas = match exato (categorias fixas)
@@ -832,7 +839,18 @@ class GoSatiService:
                 return val in terms
             return any(term in val for term in terms)
 
+        def _excluded(d: dict) -> bool:
+            """Retorna True se o lançamento deve ser excluído."""
+            if not _exclude_terms:
+                return False
+            val = _norm(d.get("historico", ""))
+            return any(term in val for term in _exclude_terms)
+
         def _matches(d: dict) -> bool:
+            if _excluded(d):
+                return False
+            if not filter_fields:
+                return True
             if _and_conta_sub:
                 # AND: conta E sub_conta devem bater; historico continua OR
                 conta_ok = _field_matches(
