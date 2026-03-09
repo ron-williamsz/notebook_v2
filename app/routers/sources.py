@@ -62,6 +62,7 @@ def _resolve_file_path(stored_path: str) -> Path:
     return fp  # Return original (will trigger 404)
 
 
+@router.head("/{source_id}/file")
 @router.get("/{source_id}/file")
 async def serve_source_file(
     session_id: int, source_id: int, inline: bool = False,
