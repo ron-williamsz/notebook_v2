@@ -799,24 +799,65 @@ class GoSatiService:
         if not prestacao:
             return data
 
-        # Parse filtros opcionais — normaliza para listas uppercase
+        # Normaliza acentos para comparação robusta
+        import unicodedata
+
+        def _norm(s: str) -> str:
+            return unicodedata.normalize("NFD", s.upper()).encode("ascii", "ignore").decode()
+
+        # Parse filtros opcionais — normaliza para listas uppercase sem acentos
         filter_fields: dict[str, list[str]] = {}
         for key in ("nome_conta_despesas", "nome_sub_conta", "historico"):
             raw = filters.get(key, [])
             if isinstance(raw, str):
                 raw = [raw]
-            values = [v.upper() for v in raw if v.strip()]
+            values = [_norm(v) for v in raw if v.strip()]
             if values:
                 filter_fields[key] = values
 
         if not filter_fields:
             return data
 
+        # nome_sub_conta e nome_conta_despesas = match exato (categorias fixas)
+        # historico = substring match (texto livre)
+        _exact_fields = {"nome_sub_conta", "nome_conta_despesas"}
+
+        # AND entre conta e sub_conta quando ambos informados
+        _has_conta = "nome_conta_despesas" in filter_fields
+        _has_sub = "nome_sub_conta" in filter_fields
+        _and_conta_sub = _has_conta and _has_sub
+
+        def _field_matches(field: str, terms: list[str], val: str) -> bool:
+            if field in _exact_fields:
+                return val in terms
+            return any(term in val for term in terms)
+
         def _matches(d: dict) -> bool:
-            """Match em QUALQUER campo = inclui (OR entre campos, OR dentro)."""
+            if _and_conta_sub:
+                # AND: conta E sub_conta devem bater; historico continua OR
+                conta_ok = _field_matches(
+                    "nome_conta_despesas",
+                    filter_fields["nome_conta_despesas"],
+                    _norm(d.get("nome_conta_despesas", "")),
+                )
+                sub_ok = _field_matches(
+                    "nome_sub_conta",
+                    filter_fields["nome_sub_conta"],
+                    _norm(d.get("nome_sub_conta", "")),
+                )
+                if conta_ok and sub_ok:
+                    return True
+                # historico ainda funciona como fallback OR
+                if "historico" in filter_fields:
+                    val = _norm(d.get("historico", ""))
+                    if any(term in val for term in filter_fields["historico"]):
+                        return True
+                return False
+
+            # Caso normal: OR entre todos os campos
             for field, terms in filter_fields.items():
-                val = d.get(field, "").upper()
-                if any(term in val for term in terms):
+                val = _norm(d.get(field, ""))
+                if _field_matches(field, terms, val):
                     return True
             return False
 
