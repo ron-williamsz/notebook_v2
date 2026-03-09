@@ -107,6 +107,13 @@ window.Etapas = {
     _renderResult(etapa) {
         try {
             const data = JSON.parse(etapa.result_text);
+            if (data.type === 'criterios') {
+                let html = this._renderLancamentos(data, etapa.id);
+                if (data.criterios) {
+                    html += this._renderCriteriosResult(data.criterios, etapa.id);
+                }
+                return html;
+            }
             if (data.type === 'lancamentos') {
                 let html = this._renderLancamentos(data, etapa.id);
                 if (data.analise_steps && data.analise_steps.length) {
@@ -118,6 +125,122 @@ window.Etapas = {
             // Fallback: render as markdown (compatibilidade com resultados antigos)
         }
         return marked.parse(etapa.result_text);
+    },
+
+    _renderCriteriosResult(criterios, etapaId) {
+        const resumo = criterios.resumo || {};
+        const grupos = criterios.grupos || [];
+
+        // Summary bar global
+        const aprovados = resumo.aprovados || 0;
+        const divergencias = resumo.divergencias || 0;
+        const ausentes = resumo.itens_ausentes || 0;
+
+        let html = `
+            <div class="criterios-resumo">
+                <div class="criterio-stat aprovado">
+                    <span class="criterio-stat-num">${aprovados}</span>
+                    <span class="criterio-stat-label">Aprovados</span>
+                </div>
+                <div class="criterio-stat divergencia">
+                    <span class="criterio-stat-num">${divergencias}</span>
+                    <span class="criterio-stat-label">Divergências</span>
+                </div>
+                <div class="criterio-stat ausente">
+                    <span class="criterio-stat-num">${ausentes}</span>
+                    <span class="criterio-stat-label">Ausentes</span>
+                </div>
+            </div>`;
+
+        // Render each criterion as a collapsible group
+        for (let gi = 0; gi < grupos.length; gi++) {
+            const g = grupos[gi];
+            const gId = `crit-${etapaId}-${gi}`;
+            const hasProblems = (g.divergencias || 0) + (g.ausentes || 0) > 0;
+            const allOk = !hasProblems;
+
+            // Group status indicator
+            let statusBadge;
+            if (allOk) {
+                statusBadge = `<span class="criterio-badge aprovado">${g.aprovados} OK</span>`;
+            } else {
+                const parts = [];
+                if (g.divergencias) parts.push(`<span class="criterio-badge divergencia">${g.divergencias} DIVERG.</span>`);
+                if (g.ausentes) parts.push(`<span class="criterio-badge ausente">${g.ausentes} AUSENT.</span>`);
+                if (g.aprovados) parts.push(`<span class="criterio-badge aprovado">${g.aprovados} OK</span>`);
+                statusBadge = parts.join(' ');
+            }
+
+            // Auto-expand groups with problems
+            const expanded = hasProblems;
+            const chevron = expanded ? '▼' : '▶';
+            const bodyClass = expanded ? '' : ' hidden';
+
+            html += `
+                <div class="criterio-grupo ${hasProblems ? 'has-problems' : 'all-ok'}">
+                    <div class="criterio-grupo-header" onclick="Etapas.toggleCriterioGrupo('${gId}')">
+                        <span class="criterio-grupo-chevron" id="crit-chev-${gId}">${chevron}</span>
+                        <span class="criterio-grupo-nome">${Utils.escapeHtml(g.criterio_nome)}</span>
+                        <span class="criterio-grupo-badges">${statusBadge}</span>
+                    </div>
+                    <div class="criterio-grupo-body${bodyClass}" id="crit-body-${gId}">`;
+
+            // Items table
+            const itens = g.itens || [];
+            // Sort: problems first, then approved
+            const sorted = [...itens].sort((a, b) => {
+                const order = { 'DIVERGENCIA': 0, 'ITEM_AUSENTE': 1, 'APROVADO': 2 };
+                return (order[a.resultado] ?? 2) - (order[b.resultado] ?? 2);
+            });
+
+            html += `<div class="criterio-itens-table">`;
+            html += `<div class="criterio-item-header">
+                        <span class="ci-col-lanc">Lanç.</span>
+                        <span class="ci-col-hist">Histórico</span>
+                        <span class="ci-col-valor">Valor</span>
+                        <span class="ci-col-result">Status</span>
+                        <span class="ci-col-detail">Detalhes</span>
+                     </div>`;
+
+            for (const r of sorted) {
+                const badgeClass = r.resultado === 'APROVADO' ? 'aprovado'
+                                 : r.resultado === 'DIVERGENCIA' ? 'divergencia'
+                                 : 'ausente';
+                const badgeLabel = r.resultado === 'APROVADO' ? 'OK'
+                                 : r.resultado === 'DIVERGENCIA' ? 'DIVERG.'
+                                 : 'AUSENTE';
+
+                let detalhes = Utils.escapeHtml(r.detalhes || '');
+                if (r.valores && r.valores.encontrado && r.valores.esperado) {
+                    detalhes = `<span class="ci-val">Encontrado: ${Utils.escapeHtml(r.valores.encontrado)}</span> <span class="ci-val-sep">→</span> <span class="ci-val">Esperado: ${Utils.escapeHtml(r.valores.esperado)}</span>`;
+                }
+
+                const info = r.lancamento_info || {};
+                const hist = Utils.escapeHtml((info.historico || '').substring(0, 50));
+                const valor = parseFloat(info.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+
+                html += `<div class="criterio-item-row ${badgeClass}" data-resultado="${r.resultado}">
+                            <span class="ci-col-lanc">${Utils.escapeHtml(r.lancamento)}</span>
+                            <span class="ci-col-hist" title="${Utils.escapeHtml(info.historico || '')}">${hist}</span>
+                            <span class="ci-col-valor">R$ ${valor}</span>
+                            <span class="ci-col-result"><span class="criterio-badge ${badgeClass}">${badgeLabel}</span></span>
+                            <span class="ci-col-detail">${detalhes}</span>
+                         </div>`;
+            }
+
+            html += `</div></div></div>`;
+        }
+
+        return html;
+    },
+
+    toggleCriterioGrupo(gId) {
+        const body = document.getElementById(`crit-body-${gId}`);
+        const chev = document.getElementById(`crit-chev-${gId}`);
+        if (!body) return;
+        const isHidden = body.classList.contains('hidden');
+        body.classList.toggle('hidden');
+        if (chev) chev.textContent = isHidden ? '▼' : '▶';
     },
 
     _renderAnaliseSteps(steps, etapaId) {
@@ -353,6 +476,39 @@ window.Etapas = {
                     body.innerHTML = this._renderLancamentos(result, etapaId);
                 }
             },
+            onCriteriaResult: (criterios) => {
+                // Resultado de critérios estruturados
+                const loading = document.getElementById(`etapa-loading-${etapaId}`);
+                if (loading) loading.remove();
+
+                let body = document.getElementById(`etapa-body-${etapaId}`);
+                if (!body) {
+                    const card = document.getElementById(`etapa-card-${etapaId}`);
+                    if (card) {
+                        const header = card.querySelector('.etapa-card-header');
+                        if (header) {
+                            const div = document.createElement('div');
+                            div.className = 'etapa-card-body';
+                            div.id = `etapa-body-${etapaId}`;
+                            header.after(div);
+                            body = div;
+                        }
+                    }
+                }
+                if (body) {
+                    body.innerHTML += this._renderCriteriosResult(criterios, etapaId);
+                }
+
+                // Merge into result_text
+                if (etapa.result_text) {
+                    try {
+                        const data = JSON.parse(etapa.result_text);
+                        data.type = 'criterios';
+                        data.criterios = criterios;
+                        etapa.result_text = JSON.stringify(data);
+                    } catch (e) { /* skip */ }
+                }
+            },
             onStepStart: ({ index, title }) => {
                 stepTexts[index] = '';
                 const body = document.getElementById(`etapa-body-${etapaId}`);
@@ -414,6 +570,8 @@ window.Etapas = {
                     etapa.status = 'done';
                 }
                 this.render();
+                // Atualiza dashboard de cobertura
+                if (window.Notebook) Notebook.loadCoverage();
             },
         });
     },

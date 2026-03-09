@@ -15,7 +15,9 @@ from sqlmodel import select
 
 from app.core.config import BASE_DIR
 from app.core.exceptions import NotFoundError
+from app.models.criterion import SkillCriterion
 from app.models.skill import Skill, SkillExample, SkillStep
+from app.schemas.criterio import CriterionSyncItem
 from app.schemas.skill import SkillCreate, SkillUpdate, StepCreate, StepSyncItem, StepUpdate
 
 logger = logging.getLogger(__name__)
@@ -36,14 +38,14 @@ class SkillService:
         if not skill:
             raise NotFoundError(404, f"Skill {skill_id} não encontrada")
         # Carrega relacionamentos
-        await self.db.refresh(skill, ["steps", "examples"])
+        await self.db.refresh(skill, ["steps", "examples", "criteria"])
         return skill
 
     async def create(self, data: SkillCreate) -> Skill:
         skill = Skill(**data.model_dump())
         self.db.add(skill)
         await self.db.commit()
-        await self.db.refresh(skill, ["steps", "examples"])
+        await self.db.refresh(skill, ["steps", "examples", "criteria"])
         return skill
 
     async def update(self, skill_id: int, data: SkillUpdate) -> Skill:
@@ -53,7 +55,7 @@ class SkillService:
             setattr(skill, key, value)
         skill.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
-        await self.db.refresh(skill, ["steps", "examples"])
+        await self.db.refresh(skill, ["steps", "examples", "criteria"])
         return skill
 
     async def delete(self, skill_id: int) -> None:
@@ -135,6 +137,42 @@ class SkillService:
             await self.db.refresh(step)
         return new_steps
 
+    # --- Criteria ---
+
+    async def sync_criteria(self, skill_id: int, items: list[CriterionSyncItem]) -> list[SkillCriterion]:
+        """Substitui todos os critérios de uma skill atomicamente."""
+        skill = await self.get_by_id(skill_id)
+
+        # Remove critérios existentes
+        existing = await self.db.execute(
+            select(SkillCriterion).where(SkillCriterion.skill_id == skill_id)
+        )
+        for crit in existing.scalars().all():
+            await self.db.delete(crit)
+
+        # Cria novos critérios
+        new_criteria = []
+        for order, item in enumerate(items, start=1):
+            if not item.nome.strip():
+                continue
+            criterion = SkillCriterion(
+                skill_id=skill_id,
+                order=order,
+                nome=item.nome,
+                tipo=item.tipo,
+                config_json=item.config_json,
+                is_active=item.is_active,
+            )
+            self.db.add(criterion)
+            new_criteria.append(criterion)
+
+        skill.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+
+        for c in new_criteria:
+            await self.db.refresh(c)
+        return new_criteria
+
     # --- Examples ---
 
     async def add_example(
@@ -212,6 +250,16 @@ class SkillService:
                 }
                 for ex in skill.examples
             ],
+            "criteria": [
+                {
+                    "order": c.order,
+                    "nome": c.nome,
+                    "tipo": c.tipo,
+                    "config_json": c.config_json,
+                    "is_active": c.is_active,
+                }
+                for c in sorted(skill.criteria, key=lambda c: c.order)
+            ],
         }
 
         buf = io.BytesIO()
@@ -248,6 +296,7 @@ class SkillService:
         skill_data = raw.get("skill", {})
         steps_data = raw.get("steps", [])
         examples_data = raw.get("examples", [])
+        criteria_data = raw.get("criteria", [])
 
         if not skill_data.get("name"):
             raise NotFoundError(400, "skill.json: campo 'name' obrigatório")
@@ -296,6 +345,20 @@ class SkillService:
             )
             self.db.add(step)
 
+        # Criteria
+        for crit_data in criteria_data:
+            if not crit_data.get("nome", "").strip():
+                continue
+            criterion = SkillCriterion(
+                skill_id=skill.id,
+                order=crit_data.get("order", 1),
+                nome=crit_data["nome"],
+                tipo=crit_data.get("tipo", "presenca_documento"),
+                config_json=crit_data.get("config_json", "{}"),
+                is_active=crit_data.get("is_active", True),
+            )
+            self.db.add(criterion)
+
         # Examples — com sanitização de filename contra path traversal
         example_dir = EXAMPLES_DIR / str(skill.id)
         for ex_data in examples_data:
@@ -329,7 +392,7 @@ class SkillService:
                 shutil.rmtree(example_dir, ignore_errors=True)
             raise
 
-        await self.db.refresh(skill, ["steps", "examples"])
+        await self.db.refresh(skill, ["steps", "examples", "criteria"])
         return skill
 
     # --- Prompt Builder ---

@@ -39,6 +39,7 @@ window.API = {
     createSession(title, opts)  { return this.request('POST', '/sessions', { body: { title, ...opts } }); },
     getSession(id)              { return this.request('GET', `/sessions/${id}`); },
     deleteSession(id)           { return this.request('DELETE', `/sessions/${id}`); },
+    getCoverage(id)             { return this.request('GET', `/sessions/${id}/coverage`); },
 
     // === Sources ===
     listSources(sessionId)      { return this.request('GET', `/sessions/${sessionId}/sources`); },
@@ -74,7 +75,7 @@ window.API = {
         return this.request('GET', `/sessions/${sessionId}/chat/history`);
     },
 
-    async _readStream(resp, onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk) {
+    async _readStream(resp, onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult) {
         if (resp.status === 401) {
             window.location.href = '/login';
             return;
@@ -100,7 +101,8 @@ window.API = {
                     }
                     try {
                         const parsed = JSON.parse(data);
-                        if (parsed.result && onResult) onResult(parsed.result);
+                        if (parsed.criteria_result && onCriteriaResult) onCriteriaResult(parsed.criteria_result);
+                        else if (parsed.result && onResult) onResult(parsed.result);
                         else if (parsed.step_start && onStepStart) onStepStart(parsed.step_start);
                         else if (parsed.step_chunk && onStepChunk) onStepChunk(parsed.step_chunk);
                         else if (parsed.text && onChunk) onChunk(parsed.text);
@@ -133,6 +135,9 @@ window.API = {
         return this.request('DELETE', `/skills/${skillId}/steps/${stepId}`);
     },
     syncSteps(skillId, steps)   { return this.request('PUT', `/skills/${skillId}/steps`, { body: { steps } }); },
+
+    // Criteria
+    syncCriteria(skillId, criteria) { return this.request('PUT', `/skills/${skillId}/criteria`, { body: { criteria } }); },
 
     // Examples
     uploadExample(skillId, file, description) {
@@ -177,11 +182,11 @@ window.API = {
     createEtapa(sessionId, skillId) {
         return this.request('POST', `/sessions/${sessionId}/etapas`, { body: { skill_id: skillId } });
     },
-    async executeEtapaStream(sessionId, etapaId, { onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk } = {}) {
+    async executeEtapaStream(sessionId, etapaId, { onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult } = {}) {
         const resp = await fetch(`${this.baseUrl}/sessions/${sessionId}/etapas/${etapaId}/execute`, {
             method: 'POST',
         });
-        await this._readStream(resp, onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk);
+        await this._readStream(resp, onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult);
     },
     deleteEtapa(sessionId, etapaId) {
         return this.request('DELETE', `/sessions/${sessionId}/etapas/${etapaId}`);

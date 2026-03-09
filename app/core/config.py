@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     bdforall_email: str = ""
     bdforall_senha: str = ""
 
+    # Auth
+    auth_username: str = "admin"
+    auth_password: str = "admin"
+
     # App
     app_host: str = "0.0.0.0"
     app_port: int = 8000

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.base import get_db
+from app.schemas.criterio import CriteriaSyncRequest, CriterionResponse
 from app.schemas.skill import (
     SkillCardResponse,
     SkillCreate,
@@ -74,6 +75,14 @@ async def delete_step(skill_id: int, step_id: int, svc: SkillService = Depends(_
 async def sync_steps(skill_id: int, data: StepSyncRequest, svc: SkillService = Depends(_svc)):
     """Substitui todas as etapas atomicamente (delete + recreate em 1 transação)."""
     return await svc.sync_steps(skill_id, data.steps)
+
+
+# --- Criteria ---
+
+@router.put("/{skill_id}/criteria", response_model=list[CriterionResponse])
+async def sync_criteria(skill_id: int, data: CriteriaSyncRequest, svc: SkillService = Depends(_svc)):
+    """Substitui todos os critérios atomicamente (delete + recreate)."""
+    return await svc.sync_criteria(skill_id, data.criteria)
 
 
 # --- Examples ---

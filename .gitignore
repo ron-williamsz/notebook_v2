@@ -20,11 +20,15 @@ env/
 notebook_zang/.gcp/
 
 # Data (runtime - DB, uploads, comprovantes, gosati cache)
+data/
 notebook_zang/data/db/
 notebook_zang/data/gosati/
 notebook_zang/data/uploads/
 notebook_zang/data/conferencias/
 notebook_zang/data/examples/
+
+# Legacy subdir
+notebook_zang/
 
 # IDE
 .vscode/

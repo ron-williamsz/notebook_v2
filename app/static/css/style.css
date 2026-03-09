@@ -614,6 +614,51 @@ dialog.modal h2 { margin-bottom: 16px; font-size: 1.15rem; font-weight: 500; }
 .btn-send svg { width: 18px; height: 18px; }
 
 /* ===========================================================
+   COVERAGE DASHBOARD
+   =========================================================== */
+.coverage-dashboard {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+.coverage-bar {
+    height: 6px;
+    background: var(--bg-secondary);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+.coverage-fill {
+    height: 100%;
+    background: var(--success);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+.coverage-stats {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+}
+.coverage-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.coverage-num {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.coverage-label {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.stat-ok .coverage-num { color: var(--success); }
+.stat-pending .coverage-num { color: var(--warning); }
+
+/* ===========================================================
    PANEL CENTRAL — Etapas
    =========================================================== */
 .etapas-container {
@@ -993,6 +1038,184 @@ dialog.modal h2 { margin-bottom: 16px; font-size: 1.15rem; font-weight: 500; }
     padding: 1px 4px;
     border-radius: 3px;
     font-size: 0.9em;
+}
+
+/* === Critérios Estruturados === */
+.criterios-resumo {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 4px;
+}
+.criterio-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    min-width: 80px;
+}
+.criterio-stat.aprovado {
+    background: rgba(129, 201, 149, 0.12);
+    color: var(--success);
+}
+.criterio-stat.divergencia {
+    background: rgba(242, 139, 130, 0.12);
+    color: var(--error);
+}
+.criterio-stat.ausente {
+    background: rgba(253, 214, 99, 0.12);
+    color: var(--warning);
+}
+.criterio-stat-num {
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1;
+}
+.criterio-stat-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: 2px;
+}
+
+/* --- Criterion group (collapsible) --- */
+.criterio-grupo {
+    margin: 0 8px 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.criterio-grupo.has-problems {
+    border-color: rgba(242, 139, 130, 0.3);
+}
+.criterio-grupo.all-ok {
+    border-color: rgba(129, 201, 149, 0.2);
+}
+.criterio-grupo-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    background: var(--bg-surface);
+    user-select: none;
+}
+.criterio-grupo-header:hover {
+    background: var(--bg-surface-hover);
+}
+.criterio-grupo-chevron {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    width: 14px;
+    flex-shrink: 0;
+}
+.criterio-grupo-nome {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+.criterio-grupo-badges {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.criterio-grupo-body {
+    border-top: 1px solid var(--border);
+}
+
+/* --- Items table inside group --- */
+.criterio-itens-table {
+    font-size: 0.8rem;
+}
+.criterio-item-header {
+    display: grid;
+    grid-template-columns: 75px 1fr 90px 70px 1fr;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+}
+.criterio-item-row {
+    display: grid;
+    grid-template-columns: 75px 1fr 90px 70px 1fr;
+    gap: 6px;
+    padding: 6px 12px;
+    align-items: center;
+    border-bottom: 1px solid var(--border-light);
+}
+.criterio-item-row:last-child {
+    border-bottom: none;
+}
+.criterio-item-row.divergencia {
+    background: rgba(242, 139, 130, 0.04);
+}
+.criterio-item-row.ausente {
+    background: rgba(253, 214, 99, 0.04);
+}
+
+.ci-col-lanc {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+.ci-col-hist {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ci-col-valor {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-align: right;
+}
+.ci-col-result {
+    text-align: center;
+}
+.ci-col-detail {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+.ci-val {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+}
+.ci-val-sep {
+    color: var(--text-muted);
+    margin: 0 2px;
+}
+
+/* Badges */
+.criterio-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.criterio-badge.aprovado {
+    background: rgba(129, 201, 149, 0.15);
+    color: var(--success);
+}
+.criterio-badge.divergencia {
+    background: rgba(242, 139, 130, 0.15);
+    color: var(--error);
+}
+.criterio-badge.ausente {
+    background: rgba(253, 214, 99, 0.15);
+    color: var(--warning);
 }
 
 /* === Document icon grid === */

@@ -25,6 +25,7 @@ from app.models.etapa import Etapa
 from app.models.session import Session
 from app.models.skill import Skill
 from app.models.source import Source
+from app.services.criteria_engine import CriteriaEngine
 from app.services.gosati_service import GoSatiService
 from app.services.skill_service import SkillService
 from app.services.source_service import SourceService
@@ -174,9 +175,21 @@ class EtapaService:
             result = await self._build_lancamentos_result(session_id)
             yield f"data: {json.dumps({'result': result})}\n\n"
 
-            # Fase 3: Análise IA por etapas da skill
-            await self.db.refresh(skill, ["steps", "examples"])
-            if skill.steps:
+            # Fase 3: Execução por modo
+            await self.db.refresh(skill, ["steps", "examples", "criteria"])
+
+            if skill.execution_mode == "criterios" and skill.criteria:
+                # Modo critérios estruturados
+                yield f"data: {json.dumps({'progress': 'Executando critérios...'})}\n\n"
+                criteria_result = await self._execute_criteria(
+                    session_id, skill, result,
+                    progress_cb=lambda msg: None,  # progress via SSE below
+                )
+                result["type"] = "criterios"
+                result["criterios"] = criteria_result
+                yield f"data: {json.dumps({'criteria_result': criteria_result})}\n\n"
+
+            elif skill.steps:
                 # Prepara contexto compartilhado (docs + metadata) uma vez
                 base_parts = await self._build_analysis_context(
                     session_id, skill, result
@@ -343,6 +356,9 @@ class EtapaService:
                     txt_path = _resolve_path(src.text_path)
                     if txt_path.exists():
                         extracted_text = txt_path.read_text(encoding="utf-8")[:2000]
+                        # Limpa sequências longas de _/- que contaminam o modelo
+                        extracted_text = re.sub(r"[_]{4,}", " ", extracted_text)
+                        extracted_text = re.sub(r"[-]{4,}", "---", extracted_text)
                         doc_desc += f"\n[Texto extraído do PDF:\n{extracted_text}\n]"
 
                 parts.append(Part.from_text(text=doc_desc))
@@ -416,11 +432,14 @@ class EtapaService:
                     system_instruction=system_instruction,
                     max_output_tokens=self.settings.gemini_max_output_tokens,
                     temperature=self.settings.gemini_temperature,
+                    frequency_penalty=0.5,
+                    presence_penalty=0.3,
                 ),
             )
             async for response in stream:
                 if response.text:
-                    yield response.text
+                    # Sanitiza separadores de tabela markdown com traços infinitos
+                    yield re.sub(r"-{4,}", "---", response.text)
         except Exception as e:
             logger.error("Erro na análise IA (step '%s'): %s", step.title, e)
             yield f"\n\n**Erro na análise:** {e}"
@@ -482,13 +501,41 @@ class EtapaService:
             logger.warning("GoSATI não retornou dados para sessão %d", session_id)
             return
 
+        # Conta total de despesas para dashboard de cobertura
+        try:
+            _all = raw_data.get("diffgram", {}).get("PrestacaoContas", {}).get("Despesas", [])
+            if not isinstance(_all, list):
+                _all = [_all]
+            session.gosati_total_despesas = len(_all)
+        except Exception:
+            pass
+
         # 2. Extrai despesas com comprovante ANTES de filtrar
         despesas_com_link = gosati_svc.extrair_despesas_com_comprovante(raw_data)
+
+        # 2b. exclude_analyzed: remove lançamentos já analisados por outras etapas
+        exclude_analyzed = filters.pop("exclude_analyzed", False) if filters else False
 
         # 3. Aplica filtros e salva como Source texto
         filtered_data = raw_data
         if filters:
             filtered_data = GoSatiService._apply_filters(raw_data, filters)
+
+        if exclude_analyzed:
+            analyzed_nums = await self._get_analyzed_lancamentos(session_id)
+            if analyzed_nums:
+                diffgram = filtered_data.get("diffgram", {})
+                prestacao = diffgram.get("PrestacaoContas", {})
+                despesas = prestacao.get("Despesas", [])
+                if isinstance(despesas, list):
+                    prestacao["Despesas"] = [
+                        d for d in despesas
+                        if str(d.get("numero_lancamento", "")) not in analyzed_nums
+                    ]
+                despesas_com_link = [
+                    d for d in despesas_com_link
+                    if str(d.get("numero_lancamento", "")) not in analyzed_nums
+                ]
 
         from app.services.gosati_service import _dict_to_text, GOSATI_DIR
         label = f"Prestação Filtrada - {mes:02d}/{ano} (Cond. {cond_codigo})"
@@ -554,3 +601,86 @@ class EtapaService:
             session_id, skill.name, cond_codigo, mes, ano,
             len(despesas_com_link),
         )
+
+    # ------------------------------------------------------------------
+    # Execução por Critérios Estruturados
+    # ------------------------------------------------------------------
+
+    async def _execute_criteria(
+        self,
+        session_id: int,
+        skill,
+        lancamentos_result: dict,
+        progress_cb=None,
+    ) -> dict:
+        """Executa critérios estruturados da skill sobre os lançamentos."""
+        lancamentos = lancamentos_result.get("lancamentos", [])
+        docs_by_lanc = await self._load_docs_by_lancamento(session_id, lancamentos)
+
+        engine = CriteriaEngine(self._gemini_client, self.settings)
+        result = await engine.execute(
+            criteria=skill.criteria,
+            lancamentos=lancamentos,
+            docs_by_lancamento=docs_by_lanc,
+            progress_cb=progress_cb,
+        )
+        return result.model_dump()
+
+    async def _load_docs_by_lancamento(
+        self, session_id: int, lancamentos: list[dict]
+    ) -> dict[str, list[dict]]:
+        """Carrega documentos por lançamento com texto extraído e file_path."""
+        sources = await self.source_svc.list_by_session(session_id)
+        doc_sources = [s for s in sources if s.origin == "gosati" and s.mime_type != "text/plain"]
+
+        docs_by_lanc: dict[str, list[dict]] = {}
+
+        for src in doc_sources:
+            doc_info = {
+                "source_id": src.id,
+                "label": src.label or src.filename,
+                "filename": src.filename,
+                "mime_type": src.mime_type,
+                "file_path": src.file_path,
+            }
+            # Carrega texto extraído se disponível
+            if src.text_path:
+                txt_path = _resolve_path(src.text_path)
+                if txt_path.exists():
+                    try:
+                        doc_info["texto_extraido"] = txt_path.read_text(encoding="utf-8")[:3000]
+                    except Exception:
+                        pass
+
+            # Associa ao lançamento pelo nº no label
+            m = re.search(r"Lanç\.(\d+)", src.label or "")
+            if m:
+                lanc_num = m.group(1)
+                docs_by_lanc.setdefault(lanc_num, []).append(doc_info)
+
+        return docs_by_lanc
+
+    async def _get_analyzed_lancamentos(self, session_id: int) -> set[str]:
+        """Retorna set de numero_lancamento já analisados em etapas 'done' desta sessão."""
+        from sqlmodel import select
+        from app.models.etapa import Etapa
+
+        result = await self.db.execute(
+            select(Etapa).where(
+                Etapa.session_id == session_id,
+                Etapa.status == "done",
+            )
+        )
+        analyzed = set()
+        for etapa in result.scalars().all():
+            if not etapa.result_text:
+                continue
+            try:
+                data = json.loads(etapa.result_text)
+                for lanc in data.get("lancamentos", []):
+                    num = str(lanc.get("numero_lancamento", ""))
+                    if num:
+                        analyzed.add(num)
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return analyzed

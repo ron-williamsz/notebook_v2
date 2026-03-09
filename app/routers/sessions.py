@@ -41,6 +41,11 @@ async def update_gosati_selection(
     return await svc.update_gosati_selection(session_id, data)
 
 
+@router.get("/{session_id}/coverage")
+async def get_coverage(session_id: int, svc: SessionService = Depends(_svc)):
+    return await svc.get_coverage(session_id)
+
+
 @router.delete("/{session_id}", status_code=204)
 async def delete_session(session_id: int, svc: SessionService = Depends(_svc)):
     await svc.delete(session_id)

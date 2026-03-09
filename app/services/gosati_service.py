@@ -20,6 +20,29 @@ logger = logging.getLogger(__name__)
 
 GOSATI_DIR = BASE_DIR / "data" / "gosati"
 
+def _pdf_label_with_hint(text_path: str) -> str:
+    """Gera label para PDF usando as primeiras palavras do conteúdo extraído."""
+    if not text_path:
+        return "Documento PDF"
+    try:
+        with open(text_path, encoding="utf-8") as f:
+            text = f.read(1000)
+    except Exception:
+        return "Documento PDF"
+
+    # Pega a primeira linha significativa (ignora marcadores de página e linhas vazias)
+    for line in text.split("\n"):
+        line = line.strip().strip("-— ")
+        if line and "página" not in line.lower() and len(line) > 5:
+            # Trunca em 60 chars para manter o label legível
+            hint = line[:60].rstrip()
+            if len(line) > 60:
+                hint += "…"
+            return f"Documento PDF ({hint})"
+
+    return "Documento PDF"
+
+
 # Cache em memória da prestação de contas (evita refazer SOAP para listar comprovantes)
 _prestacao_cache: dict[str, dict] = {}
 
@@ -896,7 +919,7 @@ class GoSatiService:
                 elif total_docs == 1:
                     doc_type = "Comprovante"
                 elif ext == ".pdf":
-                    doc_type = "Relação Bancária"
+                    doc_type = _pdf_label_with_hint(text_path)
                 else:
                     doc_type = "Comprovante de Pagamento"
 

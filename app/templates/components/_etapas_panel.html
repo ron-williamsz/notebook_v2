@@ -25,6 +25,27 @@
     <span class="etapas-cond-label" id="etapas-cond-label" style="font-size:0.78rem; color:var(--text-muted);"></span>
 </div>
 
+<!-- Dashboard de cobertura -->
+<div class="coverage-dashboard hidden" id="coverage-dashboard">
+    <div class="coverage-bar">
+        <div class="coverage-fill" id="coverage-fill" style="width:0%"></div>
+    </div>
+    <div class="coverage-stats">
+        <span class="coverage-stat">
+            <span class="coverage-num" id="coverage-total">0</span>
+            <span class="coverage-label">Total</span>
+        </span>
+        <span class="coverage-stat stat-ok">
+            <span class="coverage-num" id="coverage-analisados">0</span>
+            <span class="coverage-label">Analisados</span>
+        </span>
+        <span class="coverage-stat stat-pending">
+            <span class="coverage-num" id="coverage-pendentes">0</span>
+            <span class="coverage-label">Pendentes</span>
+        </span>
+    </div>
+</div>
+
 <!-- Etapas container -->
 <div class="etapas-container" id="etapas-container">
     <!-- Estado vazio -->

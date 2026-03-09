@@ -5,6 +5,7 @@ window.SkillEditor = {
     skillId: null,
     skill: null,
     steps: [],
+    criteria: [],
     examples: [],
     saving: false,
 
@@ -28,16 +29,40 @@ window.SkillEditor = {
             document.getElementById('skill-color').value = this.skill.color;
             document.getElementById('skill-macro').value = this.skill.macro_instruction;
 
-            // Deep-copy para não compartilhar referência com this.skill.steps
+            // Execution mode
+            const modeSelect = document.getElementById('skill-execution-mode');
+            if (modeSelect) modeSelect.value = this.skill.execution_mode || 'chat';
+            this.onModeChange();
+
+            // Deep-copy para não compartilhar referência
             this.steps = (this.skill.steps || []).map(s => ({ ...s }));
+            this.criteria = (this.skill.criteria || []).map(c => ({
+                nome: c.nome,
+                tipo: c.tipo,
+                config_json: c.config_json,
+                is_active: c.is_active !== false,
+            }));
             this.examples = this.skill.examples || [];
             this.renderSteps();
+            this.renderCriteria();
             this.renderExamples();
             this.loadGosatiConfig();
         } catch (e) {
             Utils.toast('Erro ao carregar skill: ' + e.message, 'error');
         }
     },
+
+    // --- Execution mode toggle ---
+
+    onModeChange() {
+        const mode = document.getElementById('skill-execution-mode').value;
+        const stepsSection = document.getElementById('section-steps');
+        const criteriaSection = document.getElementById('section-criteria');
+        if (stepsSection) stepsSection.classList.toggle('hidden', mode === 'criterios');
+        if (criteriaSection) criteriaSection.classList.toggle('hidden', mode !== 'criterios');
+    },
+
+    // --- Steps ---
 
     renderSteps() {
         const list = document.getElementById('steps-list');
@@ -51,8 +76,8 @@ window.SkillEditor = {
                 <div class="step-number">${i + 1}</div>
                 <div class="step-content">
                     <input type="text" class="input" value="${Utils.escapeHtml(step.title)}"
-                           placeholder="Título da etapa" oninput="SkillEditor.updateLocalStep(${i}, 'title', this.value)">
-                    <textarea class="input" rows="2" placeholder="Instrução específica para esta etapa"
+                           placeholder="Titulo da etapa" oninput="SkillEditor.updateLocalStep(${i}, 'title', this.value)">
+                    <textarea class="input" rows="2" placeholder="Instrucao especifica para esta etapa"
                               oninput="SkillEditor.updateLocalStep(${i}, 'instruction', this.value)">${Utils.escapeHtml(step.instruction)}</textarea>
                 </div>
                 <div class="step-actions">
@@ -66,33 +91,9 @@ window.SkillEditor = {
         `).join('');
     },
 
-    renderExamples() {
-        const list = document.getElementById('examples-list');
-        if (!this.examples.length) {
-            list.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">Nenhum arquivo de exemplo.</p>';
-            return;
-        }
-
-        list.innerHTML = this.examples.map(ex => `
-            <div class="example-item">
-                <span class="example-icon">📄</span>
-                <div class="example-info">
-                    <div class="example-name">${Utils.escapeHtml(ex.filename)}</div>
-                    <div class="example-desc">${Utils.escapeHtml(ex.description || 'Sem descrição')}</div>
-                </div>
-                <button class="btn-icon btn-ghost btn-danger" onclick="SkillEditor.removeExample(${ex.id})" title="Remover">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                </button>
-            </div>
-        `).join('');
-    },
-
     addStep() {
         this.steps.push({ title: '', instruction: '', expected_output: null });
         this.renderSteps();
-        // Foca no último
         const inputs = document.querySelectorAll('.step-item:last-child input');
         if (inputs.length) inputs[0].focus();
     },
@@ -106,11 +107,321 @@ window.SkillEditor = {
         this.renderSteps();
     },
 
+    _collectStepsFromDOM() {
+        const stepItems = document.querySelectorAll('.step-item');
+        stepItems.forEach((el, i) => {
+            if (i < this.steps.length) {
+                const titleInput = el.querySelector('input');
+                const instrTextarea = el.querySelector('textarea');
+                if (titleInput) this.steps[i].title = titleInput.value;
+                if (instrTextarea) this.steps[i].instruction = instrTextarea.value;
+            }
+        });
+    },
+
+    async syncSteps(skillId) {
+        const steps = this.steps
+            .filter(s => s.title.trim())
+            .map(s => ({
+                title: s.title,
+                instruction: s.instruction,
+                expected_output: s.expected_output || null,
+            }));
+        await API.syncSteps(skillId, steps);
+    },
+
+    // --- Criteria ---
+
+    _criterionDefaults(tipo) {
+        if (tipo === 'presenca_documento') {
+            return { documento_nome: '', palavras_chave: [], obrigatorio: true, posicao: 'todos' };
+        }
+        if (tipo === 'classificacao_documento') {
+            return { categorias: [] };
+        }
+        if (tipo === 'conferencia_conteudo') {
+            return { campo: '', buscar_em: '', comparar_com: '', instrucao_busca: '', tipo_comparacao: 'igualdade', tolerancia: 0.01 };
+        }
+        return {};
+    },
+
+    _parseCriterionConfig(c) {
+        try { return JSON.parse(c.config_json || '{}'); } catch { return {}; }
+    },
+
+    addCriterion(tipo) {
+        const defaults = this._criterionDefaults(tipo);
+        const tipoLabels = {
+            presenca_documento: 'Presenca de Documento',
+            classificacao_documento: 'Classificacao de Documento',
+            conferencia_conteudo: 'Conferencia de Conteudo',
+        };
+        this.criteria.push({
+            nome: tipoLabels[tipo] || tipo,
+            tipo,
+            config_json: JSON.stringify(defaults),
+            is_active: true,
+        });
+        this.renderCriteria();
+        // Focus last criterion's name input
+        const items = document.querySelectorAll('.criterion-item');
+        if (items.length) {
+            const lastInput = items[items.length - 1].querySelector('.criterion-nome');
+            if (lastInput) lastInput.focus();
+        }
+    },
+
+    removeCriterion(index) {
+        this.criteria.splice(index, 1);
+        this.renderCriteria();
+    },
+
+    renderCriteria() {
+        const list = document.getElementById('criteria-list');
+        if (!list) return;
+        if (!this.criteria.length) {
+            list.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">Nenhum criterio adicionado.</p>';
+            return;
+        }
+
+        list.innerHTML = this.criteria.map((c, i) => {
+            const config = this._parseCriterionConfig(c);
+            const tipoLabels = {
+                presenca_documento: 'Presenca',
+                classificacao_documento: 'Classificacao',
+                conferencia_conteudo: 'Conferencia IA',
+            };
+            const tipoLabel = tipoLabels[c.tipo] || c.tipo;
+
+            let fieldsHtml = '';
+            if (c.tipo === 'presenca_documento') {
+                fieldsHtml = this._renderPresencaFields(i, config);
+            } else if (c.tipo === 'classificacao_documento') {
+                fieldsHtml = this._renderClassificacaoFields(i, config);
+            } else if (c.tipo === 'conferencia_conteudo') {
+                fieldsHtml = this._renderConferenciaFields(i, config);
+            }
+
+            return `
+                <div class="criterion-item" style="border:1px solid var(--border); border-radius:var(--radius-sm); padding:12px; margin-bottom:8px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <span style="font-size:0.7rem; padding:2px 8px; border-radius:var(--radius-full); background:var(--accent-subtle); color:var(--accent); font-weight:600;">${tipoLabel}</span>
+                        <input type="text" class="input criterion-nome" value="${Utils.escapeHtml(c.nome)}"
+                               placeholder="Nome do criterio" style="flex:1;"
+                               oninput="SkillEditor.updateCriterionField(${i}, 'nome', this.value)">
+                        <button class="btn-icon btn-ghost btn-danger" onclick="SkillEditor.removeCriterion(${i})" title="Remover">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                        </button>
+                    </div>
+                    ${fieldsHtml}
+                </div>`;
+        }).join('');
+    },
+
+    _renderPresencaFields(idx, config) {
+        return `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div class="form-group">
+                    <label style="font-size:0.8rem;">Nome do documento</label>
+                    <input type="text" class="input criterion-cfg" data-idx="${idx}" data-field="documento_nome"
+                           value="${Utils.escapeHtml(config.documento_nome || '')}" placeholder="Comprovante, NF, Relatorio...">
+                </div>
+                <div class="form-group">
+                    <label style="font-size:0.8rem;">Palavras-chave (separadas por virgula)</label>
+                    <input type="text" class="input criterion-cfg" data-idx="${idx}" data-field="palavras_chave"
+                           value="${Utils.escapeHtml((config.palavras_chave || []).join(', '))}" placeholder="comprovante, pagamento">
+                </div>
+                <div class="form-group">
+                    <label style="font-size:0.8rem;">Posicao</label>
+                    <select class="input criterion-cfg" data-idx="${idx}" data-field="posicao">
+                        <option value="todos" ${config.posicao === 'todos' ? 'selected' : ''}>Todos</option>
+                        <option value="primeiro" ${config.posicao === 'primeiro' ? 'selected' : ''}>Primeiro</option>
+                        <option value="ultimo" ${config.posicao === 'ultimo' ? 'selected' : ''}>Ultimo</option>
+                    </select>
+                </div>
+                <div class="form-group" style="display:flex; align-items:end;">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.8rem;">
+                        <input type="checkbox" class="criterion-cfg" data-idx="${idx}" data-field="obrigatorio"
+                               ${config.obrigatorio !== false ? 'checked' : ''}>
+                        Obrigatorio
+                    </label>
+                </div>
+            </div>`;
+    },
+
+    _renderClassificacaoFields(idx, config) {
+        const categorias = config.categorias || [];
+        let catsHtml = categorias.map((cat, ci) => `
+            <div style="display:flex; gap:8px; margin-bottom:4px; align-items:center;">
+                <input type="text" class="input criterion-cat-nome" data-idx="${idx}" data-ci="${ci}"
+                       value="${Utils.escapeHtml(cat.nome || '')}" placeholder="Nome da categoria" style="width:40%;">
+                <input type="text" class="input criterion-cat-kw" data-idx="${idx}" data-ci="${ci}"
+                       value="${Utils.escapeHtml((cat.palavras_chave || []).join(', '))}" placeholder="Palavras-chave" style="flex:1;">
+                <button class="btn-icon btn-ghost btn-danger" onclick="SkillEditor.removeCriterionCat(${idx}, ${ci})" style="flex-shrink:0;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>`).join('');
+
+        return `
+            <div class="form-group">
+                <label style="font-size:0.8rem;">Categorias</label>
+                <div id="criterion-cats-${idx}">${catsHtml}</div>
+                <button class="btn btn-outlined btn-sm" onclick="SkillEditor.addCriterionCat(${idx})" style="margin-top:4px; font-size:0.75rem;">
+                    + Categoria
+                </button>
+            </div>`;
+    },
+
+    _renderConferenciaFields(idx, config) {
+        return `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                <div class="form-group">
+                    <label style="font-size:0.8rem;">Campo a buscar</label>
+                    <input type="text" class="input criterion-cfg" data-idx="${idx}" data-field="campo"
+                           value="${Utils.escapeHtml(config.campo || '')}" placeholder="valor, competencia, favorecido, CNPJ...">
+                </div>
+                <div class="form-group">
+                    <label style="font-size:0.8rem;">Buscar em</label>
+                    <input type="text" class="input criterion-cfg" data-idx="${idx}" data-field="buscar_em"
+                           value="${Utils.escapeHtml(config.buscar_em || '')}" placeholder="comprovante, nota_fiscal, relatorio...">
+                </div>
+                <div class="form-group">
+                    <label style="font-size:0.8rem;">Comparar com</label>
+                    <select class="input criterion-cfg" data-idx="${idx}" data-field="comparar_com">
+                        <option value="" ${!config.comparar_com ? 'selected' : ''}>Apenas extrair</option>
+                        <option value="lancamento.valor" ${config.comparar_com === 'lancamento.valor' ? 'selected' : ''}>lancamento.valor</option>
+                        <option value="lancamento.historico" ${config.comparar_com === 'lancamento.historico' ? 'selected' : ''}>lancamento.historico</option>
+                        <option value="lancamento.data" ${config.comparar_com === 'lancamento.data' ? 'selected' : ''}>lancamento.data</option>
+                        <option value="periodo.mes_ano" ${config.comparar_com === 'periodo.mes_ano' ? 'selected' : ''}>periodo.mes_ano</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="font-size:0.8rem;">Tipo comparacao</label>
+                    <select class="input criterion-cfg" data-idx="${idx}" data-field="tipo_comparacao">
+                        <option value="igualdade" ${config.tipo_comparacao === 'igualdade' ? 'selected' : ''}>Igualdade</option>
+                        <option value="contem" ${config.tipo_comparacao === 'contem' ? 'selected' : ''}>Contem</option>
+                        <option value="numerico" ${config.tipo_comparacao === 'numerico' ? 'selected' : ''}>Numerico</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" style="margin-top:8px;">
+                <label style="font-size:0.8rem;">Instrucao extra para a IA (opcional)</label>
+                <input type="text" class="input criterion-cfg" data-idx="${idx}" data-field="instrucao_busca"
+                       value="${Utils.escapeHtml(config.instrucao_busca || '')}" placeholder="O valor aparece no campo LIQUIDO...">
+            </div>`;
+    },
+
+    updateCriterionField(idx, field, value) {
+        this.criteria[idx][field] = value;
+    },
+
+    addCriterionCat(idx) {
+        const config = this._parseCriterionConfig(this.criteria[idx]);
+        if (!config.categorias) config.categorias = [];
+        config.categorias.push({ nome: '', palavras_chave: [] });
+        this.criteria[idx].config_json = JSON.stringify(config);
+        this.renderCriteria();
+    },
+
+    removeCriterionCat(idx, ci) {
+        const config = this._parseCriterionConfig(this.criteria[idx]);
+        if (config.categorias) config.categorias.splice(ci, 1);
+        this.criteria[idx].config_json = JSON.stringify(config);
+        this.renderCriteria();
+    },
+
+    _collectCriteriaFromDOM() {
+        this.criteria.forEach((c, idx) => {
+            // Collect nome
+            const nomeInput = document.querySelector(`.criterion-nome[oninput*="updateCriterionField(${idx}"]`);
+            // Simpler: iterate criterion-items
+            const items = document.querySelectorAll('.criterion-item');
+            if (items[idx]) {
+                const nome = items[idx].querySelector('.criterion-nome');
+                if (nome) c.nome = nome.value;
+            }
+
+            // Collect config fields
+            const config = this._parseCriterionConfig(c);
+            document.querySelectorAll(`.criterion-cfg[data-idx="${idx}"]`).forEach(el => {
+                const field = el.dataset.field;
+                if (!field) return;
+                if (el.type === 'checkbox') {
+                    config[field] = el.checked;
+                } else if (field === 'palavras_chave') {
+                    config[field] = el.value.split(',').map(v => v.trim()).filter(Boolean);
+                } else if (field === 'tolerancia') {
+                    config[field] = parseFloat(el.value) || 0.01;
+                } else {
+                    config[field] = el.value;
+                }
+            });
+
+            // Collect classificacao categorias
+            if (c.tipo === 'classificacao_documento') {
+                const cats = [];
+                document.querySelectorAll(`.criterion-cat-nome[data-idx="${idx}"]`).forEach(el => {
+                    const ci = parseInt(el.dataset.ci);
+                    const kwEl = document.querySelector(`.criterion-cat-kw[data-idx="${idx}"][data-ci="${ci}"]`);
+                    cats.push({
+                        nome: el.value,
+                        palavras_chave: kwEl ? kwEl.value.split(',').map(v => v.trim()).filter(Boolean) : [],
+                    });
+                });
+                config.categorias = cats;
+            }
+
+            c.config_json = JSON.stringify(config);
+        });
+    },
+
+    async syncCriteria(skillId) {
+        this._collectCriteriaFromDOM();
+        const criteria = this.criteria
+            .filter(c => c.nome.trim())
+            .map(c => ({
+                nome: c.nome,
+                tipo: c.tipo,
+                config_json: c.config_json,
+                is_active: c.is_active !== false,
+            }));
+        await API.syncCriteria(skillId, criteria);
+    },
+
+    // --- Examples ---
+
+    renderExamples() {
+        const list = document.getElementById('examples-list');
+        if (!this.examples.length) {
+            list.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">Nenhum arquivo de exemplo.</p>';
+            return;
+        }
+
+        list.innerHTML = this.examples.map(ex => `
+            <div class="example-item">
+                <span class="example-icon">📄</span>
+                <div class="example-info">
+                    <div class="example-name">${Utils.escapeHtml(ex.filename)}</div>
+                    <div class="example-desc">${Utils.escapeHtml(ex.description || 'Sem descricao')}</div>
+                </div>
+                <button class="btn-icon btn-ghost btn-danger" onclick="SkillEditor.removeExample(${ex.id})" title="Remover">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+        `).join('');
+    },
+
     async exampleFileSelected(event) {
         const file = event.target.files[0];
         if (!file) return;
 
-        const description = prompt('Descrição do exemplo (o que o LLM deve observar neste arquivo):');
+        const description = prompt('Descricao do exemplo (o que o LLM deve observar neste arquivo):');
         if (description === null) return;
 
         if (this.skillId > 0) {
@@ -138,6 +449,8 @@ window.SkillEditor = {
         }
     },
 
+    // --- Save ---
+
     async save() {
         if (this.saving) return;
         this.saving = true;
@@ -145,25 +458,28 @@ window.SkillEditor = {
         if (btn) btn.disabled = true;
 
         const gosati = this.collectGosatiConfig();
+        const executionMode = document.getElementById('skill-execution-mode').value;
         const data = {
             name: document.getElementById('skill-name').value.trim(),
             description: document.getElementById('skill-desc').value.trim(),
             icon: document.getElementById('skill-icon').value.trim() || '📋',
             color: document.getElementById('skill-color').value,
             macro_instruction: document.getElementById('skill-macro').value.trim(),
+            execution_mode: executionMode,
             gosati_sections: gosati.sections,
             gosati_filters: gosati.filters,
         };
 
         if (!data.name) {
-            Utils.toast('Nome é obrigatório', 'warning');
+            Utils.toast('Nome obrigatorio', 'warning');
             this.saving = false;
             if (btn) btn.disabled = false;
             return;
         }
 
-        // Coleta valores atuais dos steps direto do DOM (garante dados frescos)
+        // Coleta valores atuais do DOM
         this._collectStepsFromDOM();
+        this._collectCriteriaFromDOM();
 
         try {
             let skill;
@@ -179,8 +495,12 @@ window.SkillEditor = {
                 document.getElementById('btn-export').classList.remove('hidden');
             }
 
-            // Salva etapas
-            await this.syncSteps(skill.id);
+            // Salva etapas e criterios
+            if (executionMode === 'criterios') {
+                await this.syncCriteria(skill.id);
+            } else {
+                await this.syncSteps(skill.id);
+            }
 
             Utils.toast('Skill salva com sucesso!', 'success');
             await this.loadSkill();
@@ -192,35 +512,11 @@ window.SkillEditor = {
         }
     },
 
-    _collectStepsFromDOM() {
-        const stepItems = document.querySelectorAll('.step-item');
-        stepItems.forEach((el, i) => {
-            if (i < this.steps.length) {
-                const titleInput = el.querySelector('input');
-                const instrTextarea = el.querySelector('textarea');
-                if (titleInput) this.steps[i].title = titleInput.value;
-                if (instrTextarea) this.steps[i].instruction = instrTextarea.value;
-            }
-        });
-    },
-
-    async syncSteps(skillId) {
-        // Envia todas as etapas de uma vez — backend faz delete + recreate numa única transação
-        const steps = this.steps
-            .filter(s => s.title.trim())
-            .map(s => ({
-                title: s.title,
-                instruction: s.instruction,
-                expected_output: s.expected_output || null,
-            }));
-        await API.syncSteps(skillId, steps);
-    },
-
     async deleteSkill() {
         if (!confirm('Tem certeza que deseja excluir esta skill?')) return;
         try {
             await API.deleteSkill(this.skillId);
-            Utils.toast('Skill excluída', 'success');
+            Utils.toast('Skill excluida', 'success');
             location.href = '/admin/skills';
         } catch (e) {
             Utils.toast('Erro: ' + e.message, 'error');
@@ -231,6 +527,8 @@ window.SkillEditor = {
         if (!this.skillId) return;
         window.location.href = `/api/v1/skills/${this.skillId}/export`;
     },
+
+    // --- GoSATI config ---
 
     toggleGosati() {
         const enabled = document.getElementById('gosati-enabled').checked;
@@ -307,7 +605,7 @@ window.SkillEditor = {
         const ano = parseInt(document.getElementById('browse-ano').value);
 
         if (!condominio || !mes || !ano) {
-            Utils.toast('Preencha condomínio, mês e ano', 'warning');
+            Utils.toast('Preencha condominio, mes e ano', 'warning');
             return;
         }
 

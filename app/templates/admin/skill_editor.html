@@ -60,8 +60,19 @@
             <textarea class="input" id="skill-macro" rows="6" placeholder="Você é um especialista em análise contábil de condomínios. Seu objetivo é verificar se os documentos estão corretos..."></textarea>
         </div>
 
-        <!-- Etapas -->
+        <!-- Modo de execução -->
         <div class="skill-editor-section">
+            <h3>Modo de Execução</h3>
+            <div class="form-group">
+                <select class="input" id="skill-execution-mode" onchange="SkillEditor.onModeChange()">
+                    <option value="chat">Chat (etapas texto livre)</option>
+                    <option value="criterios">Critérios Estruturados</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Etapas (modo chat) -->
+        <div class="skill-editor-section" id="section-steps">
             <h3>Etapas Específicas</h3>
             <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
                 Defina as etapas que o LLM deve seguir ao executar a análise.
@@ -75,6 +86,28 @@
                 </svg>
                 Adicionar Etapa
             </button>
+        </div>
+
+        <!-- Critérios (modo criterios) -->
+        <div class="skill-editor-section hidden" id="section-criteria">
+            <h3>Critérios</h3>
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+                Defina os critérios de verificação. Presença e classificação são rule-based (sem IA). Conferência de conteúdo usa IA.
+            </p>
+            <div id="criteria-list">
+                <!-- Preenchido por JS -->
+            </div>
+            <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+                <button class="btn btn-outlined btn-sm" onclick="SkillEditor.addCriterion('presenca_documento')">
+                    + Presença de Documento
+                </button>
+                <button class="btn btn-outlined btn-sm" onclick="SkillEditor.addCriterion('classificacao_documento')">
+                    + Classificação de Documento
+                </button>
+                <button class="btn btn-outlined btn-sm" onclick="SkillEditor.addCriterion('conferencia_conteudo')">
+                    + Conferência de Conteúdo
+                </button>
+            </div>
         </div>
 
         <!-- Fonte de Dados GoSATI -->

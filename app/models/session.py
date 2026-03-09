@@ -20,6 +20,7 @@ class Session(SQLModel, table=True):
     gosati_condominio_nome: Optional[str] = Field(default=None)
     gosati_mes: Optional[int] = Field(default=None)
     gosati_ano: Optional[int] = Field(default=None)
+    gosati_total_despesas: Optional[int] = Field(default=None)
 
     sources: list["Source"] = Relationship(
         back_populates="session",

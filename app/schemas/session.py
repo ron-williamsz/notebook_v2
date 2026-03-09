@@ -31,5 +31,6 @@ class SessionResponse(BaseModel):
     gosati_condominio_nome: str | None = None
     gosati_mes: int | None = None
     gosati_ano: int | None = None
+    gosati_total_despesas: int | None = None
 
     model_config = {"from_attributes": True}

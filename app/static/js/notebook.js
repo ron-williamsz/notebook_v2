@@ -28,6 +28,9 @@ window.Notebook = {
                 Skills.init(this.sessionId),
                 Etapas.init(this.sessionId),
             ]);
+
+            // Dashboard de cobertura
+            this.loadCoverage();
         } catch (e) {
             Utils.toast('Erro ao carregar notebook: ' + e.message, 'error');
         }
@@ -47,6 +50,23 @@ window.Notebook = {
         const nome = this.session.gosati_condominio_nome;
         if (codigo) {
             label.textContent = `${codigo} — ${nome || ''}`;
+        }
+    },
+
+    async loadCoverage() {
+        try {
+            const cov = await API.getCoverage(this.sessionId);
+            const dash = document.getElementById('coverage-dashboard');
+            if (!dash) return;
+            if (!cov.total_despesas) { dash.classList.add('hidden'); return; }
+
+            dash.classList.remove('hidden');
+            document.getElementById('coverage-total').textContent = cov.total_despesas;
+            document.getElementById('coverage-analisados').textContent = cov.analisados;
+            document.getElementById('coverage-pendentes').textContent = cov.pendentes;
+            document.getElementById('coverage-fill').style.width = cov.percentual + '%';
+        } catch (e) {
+            // silently fail
         }
     },
 

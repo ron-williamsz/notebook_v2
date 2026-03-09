@@ -1,4 +1,5 @@
 """Serviço de gerenciamento de Sessions."""
+import json
 import logging
 import shutil
 
@@ -7,6 +8,7 @@ from sqlmodel import select
 
 from app.core.config import BASE_DIR
 from app.core.exceptions import NotFoundError
+from app.models.etapa import Etapa
 from app.models.session import Session
 from app.models.chat_message import ChatMessage as ChatMessageRecord
 from app.schemas.session import GoSatiSelection, SessionCreate
@@ -47,6 +49,41 @@ class SessionService:
         await self.db.commit()
         await self.db.refresh(session)
         return session
+
+    async def get_coverage(self, session_id: int) -> dict:
+        """Retorna cobertura de análise: total, analisados, pendentes."""
+        session = await self.get_by_id(session_id)
+        total = session.gosati_total_despesas or 0
+
+        result = await self.db.execute(
+            select(Etapa).where(
+                Etapa.session_id == session_id,
+                Etapa.status == "done",
+            )
+        )
+        etapas = result.scalars().all()
+
+        analisados: set[str] = set()
+        for etapa in etapas:
+            if not etapa.result_text:
+                continue
+            try:
+                data = json.loads(etapa.result_text)
+                for lanc in data.get("lancamentos", []):
+                    num = str(lanc.get("numero_lancamento", ""))
+                    if num:
+                        analisados.add(num)
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        n_analisados = len(analisados)
+        return {
+            "total_despesas": total,
+            "analisados": n_analisados,
+            "pendentes": max(0, total - n_analisados),
+            "percentual": round(n_analisados / total * 100) if total > 0 else 0,
+            "lancamentos_analisados": sorted(analisados),
+        }
 
     async def delete(self, session_id: int) -> None:
         session = await self.get_by_id(session_id)

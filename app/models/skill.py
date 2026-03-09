@@ -29,6 +29,10 @@ class Skill(SQLModel, table=True):
         back_populates="skill",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
+    criteria: list["SkillCriterion"] = Relationship(  # noqa: F821
+        back_populates="skill",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan", "order_by": "SkillCriterion.order"},
+    )
 
 
 class SkillStep(SQLModel, table=True):

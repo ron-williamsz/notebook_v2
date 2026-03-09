@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.criterio import CriterionResponse
+
 
 # === Steps ===
 class StepCreate(BaseModel):
@@ -55,6 +57,7 @@ class SkillCreate(BaseModel):
     icon: str = Field(default="📋", max_length=10)
     color: str = Field(default="#6366f1", max_length=9)
     macro_instruction: str = ""
+    execution_mode: str = "chat"
     gosati_sections: str | None = None
     gosati_filters: str | None = None
 
@@ -65,6 +68,7 @@ class SkillUpdate(BaseModel):
     icon: str | None = None
     color: str | None = None
     macro_instruction: str | None = None
+    execution_mode: str | None = None
     is_active: bool | None = None
     gosati_sections: str | None = None
     gosati_filters: str | None = None
@@ -85,6 +89,7 @@ class SkillResponse(BaseModel):
     updated_at: datetime
     steps: list[StepResponse] = []
     examples: list[ExampleResponse] = []
+    criteria: list[CriterionResponse] = []
 
     model_config = {"from_attributes": True}
 
