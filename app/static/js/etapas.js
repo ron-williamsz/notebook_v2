@@ -380,28 +380,61 @@ window.Etapas = {
         if (chev) chev.textContent = isHidden ? '▼' : '▶';
     },
 
-    openViewer(url, mimeType, label) {
+    async openViewer(url, mimeType, label) {
         const overlay = document.getElementById('doc-viewer-overlay');
         const title = document.getElementById('doc-viewer-title');
         const body = document.getElementById('doc-viewer-body');
         if (!overlay || !body) return;
 
         title.textContent = label;
-        const inlineUrl = url + '?inline=1';
-
-        const isImage = mimeType && mimeType.startsWith('image/');
-        const isPdf = mimeType === 'application/pdf';
-
-        if (isImage) {
-            body.innerHTML = `<img src="${inlineUrl}" alt="${Utils.escapeHtml(label)}"/>`;
-        } else if (isPdf) {
-            body.innerHTML = `<iframe src="${inlineUrl}#view=FitH"></iframe>`;
-        } else {
-            body.innerHTML = `<iframe src="${inlineUrl}"></iframe>`;
-        }
-
         overlay.classList.remove('hidden');
         document.addEventListener('keydown', this._viewerEscHandler);
+
+        // Loading spinner enquanto verifica o arquivo
+        body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%"><div class="spinner"></div></div>';
+
+        const inlineUrl = url + '?inline=1';
+        let realMime = mimeType || '';
+
+        // HEAD request: verifica existência e obtém content-type real do servidor
+        try {
+            const resp = await fetch(inlineUrl, { method: 'HEAD' });
+            if (!resp.ok) {
+                body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);flex-direction:column;gap:12px">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.5">
+                        <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    <span>Documento não encontrado</span>
+                </div>`;
+                return;
+            }
+            // Usa content-type real do servidor (mais confiável que o mime salvo no JSON)
+            const ct = resp.headers.get('content-type');
+            if (ct) realMime = ct.split(';')[0].trim();
+        } catch {
+            body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">Erro ao carregar documento</div>';
+            return;
+        }
+
+        const isImage = realMime.startsWith('image/');
+        const isPdf = realMime === 'application/pdf';
+
+        if (isImage) {
+            const img = document.createElement('img');
+            img.src = inlineUrl;
+            img.alt = label;
+            img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain';
+            img.onerror = () => {
+                body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">Falha ao carregar imagem</div>';
+            };
+            body.innerHTML = '';
+            body.appendChild(img);
+        } else if (isPdf) {
+            body.innerHTML = `<iframe src="${inlineUrl}#view=FitH" style="width:100%;height:100%;border:none"></iframe>`;
+        } else {
+            // Fallback: tenta iframe para qualquer outro tipo
+            body.innerHTML = `<iframe src="${inlineUrl}" style="width:100%;height:100%;border:none"></iframe>`;
+        }
     },
 
     closeViewer(event) {
