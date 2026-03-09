@@ -446,7 +446,8 @@ window.Etapas = {
         // Acumula resultados das etapas de análise durante streaming
         const stepTexts = {};
 
-        await API.executeEtapaStream(this.sessionId, etapaId, {
+        try {
+          await API.executeEtapaStream(this.sessionId, etapaId, {
             onProgress: (msg) => {
                 const progress = document.getElementById(`etapa-progress-${etapaId}`);
                 if (progress) progress.textContent = msg;
@@ -573,17 +574,28 @@ window.Etapas = {
                 // Atualiza dashboard de cobertura
                 if (window.Notebook) Notebook.loadCoverage();
             },
-        });
+          });
+        } catch (err) {
+            delete this.executing[etapaId];
+            etapa.status = 'error';
+            etapa.error_message = err.message || 'Erro de rede durante execução';
+            this.render();
+        }
     },
 
     async remove(etapaId) {
         if (!confirm('Remover esta etapa?')) return;
         try {
             await API.deleteEtapa(this.sessionId, etapaId);
-            this.etapas = this.etapas.filter(e => e.id !== etapaId);
-            this.render();
         } catch (e) {
-            Utils.toast('Erro ao remover etapa: ' + e.message, 'error');
+            // Se 404, a etapa já foi removida no backend — prosseguir com remoção local
+            if (!e.message.includes('404') && !e.message.toLowerCase().includes('não encontrada')) {
+                Utils.toast('Erro ao remover etapa: ' + e.message, 'error');
+                return;
+            }
         }
+        this.etapas = this.etapas.filter(e => e.id !== etapaId);
+        this.render();
+        if (window.Notebook) Notebook.loadCoverage();
     },
 };
