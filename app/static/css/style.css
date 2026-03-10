@@ -1080,6 +1080,139 @@ dialog.modal h2 { margin-bottom: 16px; font-size: 1.15rem; font-weight: 500; }
     margin-top: 2px;
 }
 
+/* --- Historico Panel (dados brutos para comparação) --- */
+.historico-panel {
+    margin: 0 8px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.historico-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    background: var(--bg-surface);
+    user-select: none;
+    border-bottom: 1px solid transparent;
+}
+.historico-panel-header:hover {
+    background: var(--bg-surface-hover);
+}
+.historico-panel-chevron {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    width: 14px;
+    flex-shrink: 0;
+}
+.historico-panel-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    flex: 1;
+}
+.historico-panel-count {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+.historico-panel-body {
+    border-top: 1px solid var(--border);
+    max-height: 400px;
+    overflow-y: auto;
+}
+.historico-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+}
+.historico-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+.historico-table th {
+    background: var(--bg-surface);
+    padding: 6px 8px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+.historico-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border-light);
+    vertical-align: top;
+}
+.historico-table tr:last-child td {
+    border-bottom: none;
+}
+.historico-table tr:hover td {
+    background: var(--bg-surface-hover);
+}
+.hist-col-lanc {
+    width: 70px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.hist-col-hist {
+    min-width: 180px;
+    color: var(--text-primary);
+    line-height: 1.4;
+    word-break: break-word;
+}
+.hist-col-valor {
+    width: 90px;
+    font-family: var(--font-mono);
+    text-align: right;
+    white-space: nowrap;
+    color: var(--text-secondary);
+}
+.hist-col-conta {
+    width: 120px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.hist-col-docs {
+    width: 50px;
+    text-align: center;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+.hist-doc-flag {
+    font-size: 0.7rem;
+}
+.hist-doc-flag.has {
+    color: var(--success);
+}
+.hist-doc-flag.none {
+    color: var(--error);
+    opacity: 0.6;
+}
+mark.hist-nf-ref {
+    background: rgba(129, 201, 149, 0.2);
+    color: var(--success);
+    padding: 0 2px;
+    border-radius: 2px;
+}
+mark.hist-sem-nf {
+    background: rgba(242, 139, 130, 0.2);
+    color: var(--error);
+    padding: 0 2px;
+    border-radius: 2px;
+}
+
 /* --- Criterion group (collapsible) --- */
 .criterio-grupo {
     margin: 0 8px 6px;

@@ -113,7 +113,7 @@ window.Etapas = {
             if (data.type === 'criterios') {
                 let html = this._renderLancamentos(data, etapa.id);
                 if (data.criterios) {
-                    html += this._renderCriteriosResult(data.criterios, etapa.id);
+                    html += this._renderCriteriosResult(data.criterios, etapa.id, data.lancamentos);
                 }
                 return html;
             }
@@ -130,7 +130,7 @@ window.Etapas = {
         return marked.parse(etapa.result_text);
     },
 
-    _renderCriteriosResult(criterios, etapaId) {
+    _renderCriteriosResult(criterios, etapaId, lancamentos) {
         const resumo = criterios.resumo || {};
         const grupos = criterios.grupos || [];
 
@@ -154,6 +154,11 @@ window.Etapas = {
                     <span class="criterio-stat-label">Ausentes</span>
                 </div>
             </div>`;
+
+        // Painel de Histórico — dados brutos dos lançamentos para comparação
+        if (lancamentos && lancamentos.length) {
+            html += this._renderHistoricoPanel(lancamentos, etapaId);
+        }
 
         // Render each criterion as a collapsible group
         for (let gi = 0; gi < grupos.length; gi++) {
@@ -235,6 +240,72 @@ window.Etapas = {
         }
 
         return html;
+    },
+
+    _renderHistoricoPanel(lancamentos, etapaId) {
+        const panelId = `hist-panel-${etapaId}`;
+        let rows = '';
+
+        for (const lanc of lancamentos) {
+            const num = Utils.escapeHtml(lanc.numero_lancamento || '');
+            const hist = Utils.escapeHtml(lanc.historico || '—');
+            const valor = parseFloat(lanc.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+            const conta = Utils.escapeHtml(lanc.nome_conta || '');
+            const subConta = Utils.escapeHtml(lanc.nome_sub_conta || '');
+            const docCount = (lanc.documentos || []).length;
+            const temDocto = lanc.tem_docto;
+            const docIcon = temDocto
+                ? `<span class="hist-doc-flag has" title="GoSATI: tem documento">&#10003;</span>`
+                : `<span class="hist-doc-flag none" title="GoSATI: sem documento">&#10007;</span>`;
+
+            // Destaca padrões de NF no histórico
+            let histHtml = hist;
+            histHtml = histHtml.replace(/(NFE?\s*\d+|NF\.?:\s*\d+|NOTA\s+FISCAL)/gi,
+                '<mark class="hist-nf-ref">$1</mark>');
+            histHtml = histHtml.replace(/(SEM\s+NF|S\/\s*NF|SEM\s+NOTA)/gi,
+                '<mark class="hist-sem-nf">$1</mark>');
+
+            rows += `
+                <tr class="hist-row">
+                    <td class="hist-col-lanc">${num}</td>
+                    <td class="hist-col-hist">${histHtml}</td>
+                    <td class="hist-col-valor">R$ ${valor}</td>
+                    <td class="hist-col-conta" title="${conta} / ${subConta}">${conta}</td>
+                    <td class="hist-col-docs">${docIcon} ${docCount}</td>
+                </tr>`;
+        }
+
+        return `
+            <div class="historico-panel">
+                <div class="historico-panel-header" onclick="Etapas.toggleHistoricoPanel('${panelId}')">
+                    <span class="historico-panel-chevron" id="hist-chev-${panelId}">▶</span>
+                    <span class="historico-panel-title">Dados do Histórico</span>
+                    <span class="historico-panel-count">${lancamentos.length} lançamentos</span>
+                </div>
+                <div class="historico-panel-body hidden" id="hist-body-${panelId}">
+                    <table class="historico-table">
+                        <thead>
+                            <tr>
+                                <th class="hist-col-lanc">Lanç.</th>
+                                <th class="hist-col-hist">Histórico</th>
+                                <th class="hist-col-valor">Valor</th>
+                                <th class="hist-col-conta">Conta</th>
+                                <th class="hist-col-docs">Docs</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    },
+
+    toggleHistoricoPanel(panelId) {
+        const body = document.getElementById(`hist-body-${panelId}`);
+        const chev = document.getElementById(`hist-chev-${panelId}`);
+        if (!body) return;
+        const isHidden = body.classList.contains('hidden');
+        body.classList.toggle('hidden');
+        if (chev) chev.textContent = isHidden ? '▼' : '▶';
     },
 
     toggleCriterioGrupo(gId) {
@@ -536,7 +607,12 @@ window.Etapas = {
                     }
                 }
                 if (body) {
-                    body.innerHTML += this._renderCriteriosResult(criterios, etapaId);
+                    // Extrai lancamentos do result_text já salvo
+                    let lancamentos = [];
+                    if (etapa.result_text) {
+                        try { lancamentos = JSON.parse(etapa.result_text).lancamentos || []; } catch {}
+                    }
+                    body.innerHTML += this._renderCriteriosResult(criterios, etapaId, lancamentos);
                 }
 
                 // Merge into result_text
