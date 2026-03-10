@@ -137,24 +137,86 @@ class CriteriaEngine:
         lancamentos: list[dict],
         docs_by_lanc: dict[str, list[dict]],
     ) -> list[CriterionResult]:
+        """Verifica presença de documento por lançamento.
+
+        Estratégia de matching em 3 camadas:
+          1. Keyword match em label + filename + texto_extraído
+          2. Label não-genérico do GoSATI (ex: "NOTA", "ISS", "DCTFWeb")
+          3. Existência de qualquer doc do mime_type correto (fallback para
+             GoSATI onde labels são genéricos como "Relação Bancária")
+        """
         results = []
         lanc_list = self._filter_by_posicao(lancamentos, config.posicao)
+        kw_lower = [kw.lower() for kw in config.palavras_chave]
+
+        # Labels genéricos do GoSATI que não indicam tipo de documento
+        _GENERIC_LABELS = {
+            "relação bancária", "relacao bancaria",
+            "comprovante de pagamento", "comprovante",
+            "documento pdf",
+        }
 
         for lanc in lanc_list:
             num = lanc["numero_lancamento"]
             docs = docs_by_lanc.get(num, [])
             found = False
+            found_detail = ""
+            mime_candidates: list[dict] = []
 
+            # Filtra docs pelo mime_type (se configurado)
             for doc in docs:
-                # Filtro por mime_type (ex: image/jpeg para comprovantes)
                 if config.mime_types:
                     doc_mime = doc.get("mime_type", "")
                     if not any(mt in doc_mime for mt in config.mime_types):
                         continue
-                texto = (doc.get("texto_extraido") or doc.get("label") or "").lower()
-                if any(kw.lower() in texto for kw in config.palavras_chave):
+                mime_candidates.append(doc)
+
+            # Se não filtra por mime, todos são candidatos
+            if not config.mime_types:
+                mime_candidates = docs
+
+            # --- Camada 1: keyword match em label + filename + texto extraído ---
+            for doc in mime_candidates:
+                parts = []
+                if doc.get("label"):
+                    parts.append(doc["label"])
+                if doc.get("filename"):
+                    parts.append(doc["filename"])
+                if doc.get("texto_extraido"):
+                    parts.append(doc["texto_extraido"])
+                texto = " ".join(parts).lower()
+
+                if any(kw in texto for kw in kw_lower):
                     found = True
+                    found_detail = f"{config.documento_nome} encontrado"
                     break
+
+            # --- Camada 2: label não-genérico (GoSATI tem tipos específicos) ---
+            if not found and mime_candidates:
+                for doc in mime_candidates:
+                    label = (doc.get("label") or "").lower()
+                    # Extrai tipo do doc (parte antes de "lanç.")
+                    tipo_part = label.split("lanç.")[0].strip() if "lanç." in label else ""
+                    # Remove sufixo "documento pdf (" para labels com hint
+                    if tipo_part.startswith("documento pdf"):
+                        tipo_part = ""
+                    if tipo_part and tipo_part not in _GENERIC_LABELS:
+                        # Label específico (ex: "NOTA", "ISS", "DCTFWeb") → encontrado
+                        found = True
+                        found_detail = f"{config.documento_nome} encontrado ({tipo_part.strip().title()})"
+                        break
+
+            # --- Camada 3: fallback — existência de doc do mime correto ---
+            # No GoSATI os labels são frequentemente genéricos ("Relação Bancária"),
+            # mas se o lançamento tem documentos, eles foram digitalizados.
+            # Considerar presença se há pelo menos 1 doc do mime correto.
+            if not found and mime_candidates and config.mime_types:
+                found = True
+                found_detail = f"{config.documento_nome} encontrado (documento presente)"
+                logger.debug(
+                    "presenca fallback: lanç=%s, %d docs mime-compatible, nenhum keyword match",
+                    num, len(mime_candidates),
+                )
 
             if found:
                 results.append(CriterionResult(
@@ -163,7 +225,7 @@ class CriteriaEngine:
                     criterio_tipo="presenca_documento",
                     documento_tipo=config.documento_nome,
                     resultado="APROVADO",
-                    detalhes=f"{config.documento_nome} encontrado",
+                    detalhes=found_detail,
                 ))
             else:
                 resultado = "ITEM_AUSENTE" if config.obrigatorio else "APROVADO"
@@ -678,21 +740,31 @@ class CriteriaEngine:
     def _find_doc_by_type(
         self, docs: list[dict], tipo_busca: str, mime_types: list[str] | None = None
     ) -> dict | None:
-        """Encontra documento pelo tipo/nome usando keywords + mime_type opcional."""
+        """Encontra documento pelo tipo/nome usando keywords + mime_type opcional.
+
+        Busca em: label + filename + texto_extraido (concatenados).
+        Fallback: retorna primeiro candidato se há docs do mime correto.
+        """
         tipo_lower = tipo_busca.lower()
+        candidates = []
         for doc in docs:
             if mime_types:
                 doc_mime = doc.get("mime_type", "")
                 if not any(mt in doc_mime for mt in mime_types):
                     continue
-            texto = (doc.get("texto_extraido") or doc.get("label") or "").lower()
+            candidates.append(doc)
+            # Busca em todos os campos textuais
+            parts = [
+                doc.get("label") or "",
+                doc.get("filename") or "",
+                doc.get("texto_extraido") or "",
+            ]
+            texto = " ".join(parts).lower()
             if tipo_lower in texto:
                 return doc
-        # Fallback: se tem um único doc (respeitando mime_type), usa ele
-        candidates = docs
-        if mime_types:
-            candidates = [d for d in docs if any(mt in d.get("mime_type", "") for mt in mime_types)]
-        if len(candidates) == 1:
+        # Fallback: se não matchou por keyword, retorna primeiro candidato do mime
+        # (GoSATI labels são frequentemente genéricos)
+        if candidates:
             return candidates[0]
         return None
 
