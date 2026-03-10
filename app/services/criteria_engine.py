@@ -130,6 +130,16 @@ class CriteriaEngine:
 
     # ── Rule-based: presenca_documento ────────────────────────────────
 
+    # Regex para detectar referência a NF no histórico do GoSATI
+    _RE_HISTORICO_TEM_NF = re.compile(
+        r"NFE?\s*\d+|NF\.?:\s*\d+|NOTA\s+FISCAL",
+        re.IGNORECASE,
+    )
+    _RE_HISTORICO_SEM_NF = re.compile(
+        r"SEM\s+NF|S/\s*NF|SEM\s+NOTA",
+        re.IGNORECASE,
+    )
+
     def _eval_presenca(
         self,
         config: PresencaDocumentoConfig,
@@ -139,11 +149,11 @@ class CriteriaEngine:
     ) -> list[CriterionResult]:
         """Verifica presença de documento por lançamento.
 
-        Estratégia de matching em 3 camadas:
+        Estratégia de matching em 4 camadas:
+          0. Análise do histórico do lançamento (detecta "SEM NF" / "NFE 12345")
           1. Keyword match em label + filename + texto_extraído
           2. Label não-genérico do GoSATI (ex: "NOTA", "ISS", "DCTFWeb")
-          3. Existência de qualquer doc do mime_type correto (fallback para
-             GoSATI onde labels são genéricos como "Relação Bancária")
+          3. Existência de qualquer doc do mime_type correto (fallback)
         """
         results = []
         lanc_list = self._filter_by_posicao(lancamentos, config.posicao)
@@ -159,62 +169,72 @@ class CriteriaEngine:
         for lanc in lanc_list:
             num = lanc["numero_lancamento"]
             docs = docs_by_lanc.get(num, [])
+            historico = lanc.get("historico", "")
             found = False
             found_detail = ""
-            mime_candidates: list[dict] = []
+            explicitly_absent = False
+
+            # --- Camada 0: análise do histórico do lançamento ---
+            # O histórico do GoSATI frequentemente indica se a NF existe:
+            #   "EMPRESA X - SERVIÇO Y - NFE 12345" → tem NF
+            #   "EMPRESA X - AQUISIÇÃO - SEM NF"    → não tem NF
+            if self._RE_HISTORICO_SEM_NF.search(historico):
+                explicitly_absent = True
+            elif self._RE_HISTORICO_TEM_NF.search(historico):
+                # O histórico referencia uma NF — marcar como encontrado
+                m = self._RE_HISTORICO_TEM_NF.search(historico)
+                nf_ref = m.group(0).strip() if m else "NF"
+                found = True
+                found_detail = f"{config.documento_nome} encontrado (histórico: {nf_ref})"
 
             # Filtra docs pelo mime_type (se configurado)
-            for doc in docs:
-                if config.mime_types:
-                    doc_mime = doc.get("mime_type", "")
-                    if not any(mt in doc_mime for mt in config.mime_types):
-                        continue
-                mime_candidates.append(doc)
-
-            # Se não filtra por mime, todos são candidatos
-            if not config.mime_types:
-                mime_candidates = docs
+            mime_candidates: list[dict] = []
+            if not found:
+                for doc in docs:
+                    if config.mime_types:
+                        doc_mime = doc.get("mime_type", "")
+                        if not any(mt in doc_mime for mt in config.mime_types):
+                            continue
+                    mime_candidates.append(doc)
+                if not config.mime_types:
+                    mime_candidates = docs
 
             # --- Camada 1: keyword match em label + filename + texto extraído ---
-            for doc in mime_candidates:
-                parts = []
-                if doc.get("label"):
-                    parts.append(doc["label"])
-                if doc.get("filename"):
-                    parts.append(doc["filename"])
-                if doc.get("texto_extraido"):
-                    parts.append(doc["texto_extraido"])
-                texto = " ".join(parts).lower()
+            if not found:
+                for doc in mime_candidates:
+                    parts = []
+                    if doc.get("label"):
+                        parts.append(doc["label"])
+                    if doc.get("filename"):
+                        parts.append(doc["filename"])
+                    if doc.get("texto_extraido"):
+                        parts.append(doc["texto_extraido"])
+                    texto = " ".join(parts).lower()
 
-                if any(kw in texto for kw in kw_lower):
-                    found = True
-                    found_detail = f"{config.documento_nome} encontrado"
-                    break
+                    if any(kw in texto for kw in kw_lower):
+                        found = True
+                        found_detail = f"{config.documento_nome} encontrado"
+                        break
 
-            # --- Camada 2: label não-genérico (GoSATI tem tipos específicos) ---
+            # --- Camada 2: label não-genérico do GoSATI ---
             if not found and mime_candidates:
                 for doc in mime_candidates:
                     label = (doc.get("label") or "").lower()
-                    # Extrai tipo do doc (parte antes de "lanç.")
                     tipo_part = label.split("lanç.")[0].strip() if "lanç." in label else ""
-                    # Remove sufixo "documento pdf (" para labels com hint
                     if tipo_part.startswith("documento pdf"):
                         tipo_part = ""
                     if tipo_part and tipo_part not in _GENERIC_LABELS:
-                        # Label específico (ex: "NOTA", "ISS", "DCTFWeb") → encontrado
                         found = True
                         found_detail = f"{config.documento_nome} encontrado ({tipo_part.strip().title()})"
                         break
 
-            # --- Camada 3: fallback — existência de doc do mime correto ---
-            # No GoSATI os labels são frequentemente genéricos ("Relação Bancária"),
-            # mas se o lançamento tem documentos, eles foram digitalizados.
-            # Considerar presença se há pelo menos 1 doc do mime correto.
-            if not found and mime_candidates and config.mime_types:
+            # --- Camada 3: fallback por existência de doc do mime correto ---
+            # Se não está explicitamente ausente e tem docs, considerar presente
+            if not found and not explicitly_absent and mime_candidates and config.mime_types:
                 found = True
                 found_detail = f"{config.documento_nome} encontrado (documento presente)"
                 logger.debug(
-                    "presenca fallback: lanç=%s, %d docs mime-compatible, nenhum keyword match",
+                    "presenca fallback: lanç=%s, %d docs mime-compatible",
                     num, len(mime_candidates),
                 )
 
@@ -229,15 +249,18 @@ class CriteriaEngine:
                 ))
             else:
                 resultado = "ITEM_AUSENTE" if config.obrigatorio else "APROVADO"
+                detail = f"{config.documento_nome} não encontrado"
+                if explicitly_absent:
+                    detail = f"{config.documento_nome} ausente (histórico: SEM NF)"
+                elif not config.obrigatorio:
+                    detail += " (opcional)"
                 results.append(CriterionResult(
                     lancamento=num,
                     criterio_nome=criterio_nome,
                     criterio_tipo="presenca_documento",
                     documento_tipo=config.documento_nome,
                     resultado=resultado,
-                    detalhes=f"{config.documento_nome} não encontrado"
-                    if config.obrigatorio
-                    else f"{config.documento_nome} não encontrado (opcional)",
+                    detalhes=detail,
                 ))
 
         return results
