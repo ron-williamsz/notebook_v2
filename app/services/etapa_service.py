@@ -84,7 +84,7 @@ class EtapaService:
                     e.status = "done"
                     e.updated_at = datetime.now(timezone.utc)
                     dirty = True
-                elif (datetime.now(timezone.utc) - e.updated_at).total_seconds() > 600:
+                elif (datetime.now(timezone.utc) - e.updated_at.replace(tzinfo=timezone.utc)).total_seconds() > 600:
                     # Mais de 10 min sem atualização → provavelmente morreu
                     e.status = "error"
                     e.error_message = "Execução interrompida (timeout)"
