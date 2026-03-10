@@ -318,6 +318,19 @@ class CriteriaEngine:
         for lanc in lanc_list:
             num = lanc["numero_lancamento"]
             docs = docs_by_lanc.get(num, [])
+            historico = lanc.get("historico", "")
+
+            # Se o histórico indica explicitamente "SEM NF", pula
+            if self._RE_HISTORICO_SEM_NF.search(historico):
+                results.append(CriterionResult(
+                    lancamento=num,
+                    criterio_nome=criterio_nome,
+                    criterio_tipo="conferencia_conteudo",
+                    documento_tipo=config.buscar_em,
+                    resultado="ITEM_AUSENTE",
+                    detalhes=f"Documento '{config.buscar_em}' ausente (histórico: SEM NF)",
+                ))
+                continue
 
             # Encontra o documento alvo pelo tipo (buscar_em) + mime_type
             target_doc = self._find_doc_by_type(
@@ -760,15 +773,31 @@ class CriteriaEngine:
         except ValueError:
             return None
 
+    # Sinônimos para tipos de documento comuns
+    _DOC_TYPE_SYNONYMS: dict[str, list[str]] = {
+        "nota fiscal": ["nota fiscal", "nf ", "nfe", "nfs", "nf-e", "nfs-e", "danfe", "invoice"],
+        "comprovante": ["comprovante", "recibo", "voucher", "pagamento"],
+        "boleto": ["boleto", "ficha de compensação"],
+        "darf": ["darf", "documento de arrecadação"],
+        "gps": ["gps", "guia da previdência"],
+    }
+
     def _find_doc_by_type(
         self, docs: list[dict], tipo_busca: str, mime_types: list[str] | None = None
     ) -> dict | None:
-        """Encontra documento pelo tipo/nome usando keywords + mime_type opcional.
+        """Encontra documento pelo tipo/nome usando keywords + sinônimos + mime_type.
 
         Busca em: label + filename + texto_extraido (concatenados).
         Fallback: retorna primeiro candidato se há docs do mime correto.
         """
         tipo_lower = tipo_busca.lower()
+        # Expande sinônimos: "nota fiscal" → ["nota fiscal", "nf ", "nfe", ...]
+        search_terms = [tipo_lower]
+        for key, syns in self._DOC_TYPE_SYNONYMS.items():
+            if key in tipo_lower or tipo_lower in key:
+                search_terms = syns
+                break
+
         candidates = []
         for doc in docs:
             if mime_types:
@@ -783,7 +812,7 @@ class CriteriaEngine:
                 doc.get("texto_extraido") or "",
             ]
             texto = " ".join(parts).lower()
-            if tipo_lower in texto:
+            if any(term in texto for term in search_terms):
                 return doc
         # Fallback: se não matchou por keyword, retorna primeiro candidato do mime
         # (GoSATI labels são frequentemente genéricos)

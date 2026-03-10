@@ -75,7 +75,22 @@ class EtapaService:
         )
         etapas = result.scalars().all()
         out = []
+        dirty = False
         for e in etapas:
+            # Auto-fix: etapas com status "running" mas que não estão de fato
+            # executando (conexão SSE caiu). Se tem resultado, marca done.
+            if e.status == "running":
+                if e.result_text:
+                    e.status = "done"
+                    e.updated_at = datetime.now(timezone.utc)
+                    dirty = True
+                elif (datetime.now(timezone.utc) - e.updated_at).total_seconds() > 600:
+                    # Mais de 10 min sem atualização → provavelmente morreu
+                    e.status = "error"
+                    e.error_message = "Execução interrompida (timeout)"
+                    e.updated_at = datetime.now(timezone.utc)
+                    dirty = True
+
             skill = await self.db.get(Skill, e.skill_id)
             out.append({
                 "id": e.id,
@@ -91,6 +106,8 @@ class EtapaService:
                 "created_at": e.created_at.isoformat(),
                 "updated_at": e.updated_at.isoformat(),
             })
+        if dirty:
+            await self.db.commit()
         return out
 
     async def create(self, session_id: int, skill_id: int) -> dict:
@@ -252,6 +269,21 @@ class EtapaService:
             etapa.updated_at = datetime.now(timezone.utc)
             await self.db.commit()
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+        finally:
+            # Safety net: se o generator parou de ser consumido (conexão SSE caiu)
+            # e o status ainda está "running", corrige para o estado correto.
+            await self.db.refresh(etapa)
+            if etapa.status == "running":
+                if etapa.result_text:
+                    etapa.status = "done"
+                    logger.info("Etapa %d: SSE desconectou mas resultado já salvo → done", etapa_id)
+                else:
+                    etapa.status = "error"
+                    etapa.error_message = "Conexão perdida durante execução"
+                    logger.warning("Etapa %d: SSE desconectou sem resultado → error", etapa_id)
+                etapa.updated_at = datetime.now(timezone.utc)
+                await self.db.commit()
 
     async def _build_lancamentos_result(self, session_id: int) -> dict:
         """Monta estrutura de lançamentos com documentos a partir das Sources."""
@@ -492,17 +524,29 @@ class EtapaService:
         except (json.JSONDecodeError, TypeError):
             filters = {}
 
-        # Remove sources GoSATI anteriores
+        # Verifica se já existem sources GoSATI (docs binários) para esta sessão.
+        # Se sim, reutiliza — apenas recria o texto filtrado.
+        # Isso evita que etapas subsequentes apaguem docs de etapas anteriores.
         sources = await self.source_svc.list_by_session(session_id)
-        for src in sources:
-            if src.origin == "gosati":
-                await self.db.delete(src)
-                session.source_count = max(0, session.source_count - 1)
+        existing_gosati_docs = [
+            s for s in sources
+            if s.origin == "gosati" and s.mime_type != "text/plain"
+        ]
+        existing_gosati_text = [
+            s for s in sources
+            if s.origin == "gosati" and s.mime_type == "text/plain"
+        ]
+        has_existing_docs = len(existing_gosati_docs) > 0
+
+        # Só remove o texto filtrado anterior (será recriado com filtros da skill atual)
+        for src in existing_gosati_text:
+            await self.db.delete(src)
+            session.source_count = max(0, session.source_count - 1)
         await self.db.commit()
 
         gosati_svc = GoSatiService(self.db, self.settings)
 
-        # 1. Consulta GoSATI
+        # 1. Consulta GoSATI (sempre, para obter dados atualizados e aplicar filtros)
         if progress_cb:
             progress_cb("Consultando GoSATI...")
 
@@ -603,7 +647,8 @@ class EtapaService:
             despesas_com_link = [d for d in despesas_com_link if _matches_desp(d)]
 
         # 5. Baixa comprovantes via SOAP (catalogo_id → RetornaArquivo)
-        if despesas_com_link:
+        # Pula download se já existem docs binários (reutiliza de etapa anterior)
+        if despesas_com_link and not has_existing_docs:
             if progress_cb:
                 progress_cb(f"Baixando comprovantes de {len(despesas_com_link)} lançamento(s)...")
 
@@ -615,6 +660,13 @@ class EtapaService:
             logger.info(
                 "Auto-fetch: %d comprovantes baixados para sessão %d",
                 len(saved), session_id,
+            )
+        elif has_existing_docs:
+            if progress_cb:
+                progress_cb(f"Reutilizando {len(existing_gosati_docs)} comprovantes existentes...")
+            logger.info(
+                "Auto-fetch: reutilizando %d docs existentes para sessão %d",
+                len(existing_gosati_docs), session_id,
             )
 
         logger.info(
