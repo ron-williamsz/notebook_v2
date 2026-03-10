@@ -291,11 +291,13 @@ class EtapaService:
 
         # Separa: texto da prestação vs documentos binários
         prestacao_text = None
+        prestacao_source_id = None
         doc_sources: list[Source] = []
 
         for src in sources:
             if src.mime_type == "text/plain" and src.origin == "gosati":
                 # Lê o texto da prestação para extrair lançamentos
+                prestacao_source_id = src.id
                 try:
                     prestacao_text = _resolve_path(src.file_path).read_text(encoding="utf-8")
                 except Exception:
@@ -336,6 +338,7 @@ class EtapaService:
             "total": len(lancamentos),
             "lancamentos": lancamentos,
             "documentos_avulsos": orphan_docs,
+            "prestacao_source_id": prestacao_source_id,
         }
 
     @staticmethod

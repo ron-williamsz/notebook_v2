@@ -111,6 +111,7 @@ window.Etapas = {
         try {
             const data = JSON.parse(etapa.result_text);
             if (data.type === 'criterios') {
+                this._currentPrestacaoSourceId = data.prestacao_source_id || null;
                 let html = this._renderLancamentos(data, etapa.id);
                 if (data.criterios) {
                     html += this._renderCriteriosResult(data.criterios, etapa.id, data.lancamentos);
@@ -118,6 +119,7 @@ window.Etapas = {
                 return html;
             }
             if (data.type === 'lancamentos') {
+                this._currentPrestacaoSourceId = data.prestacao_source_id || null;
                 let html = this._renderLancamentos(data, etapa.id);
                 if (data.analise_steps && data.analise_steps.length) {
                     html += this._renderAnaliseSteps(data.analise_steps, etapa.id);
@@ -157,7 +159,7 @@ window.Etapas = {
 
         // Painel de Histórico — dados brutos dos lançamentos para comparação
         if (lancamentos && lancamentos.length) {
-            html += this._renderHistoricoPanel(lancamentos, etapaId);
+            html += this._renderHistoricoPanel(lancamentos, etapaId, this._currentPrestacaoSourceId);
         }
 
         // Render each criterion as a collapsible group
@@ -242,7 +244,7 @@ window.Etapas = {
         return html;
     },
 
-    _renderHistoricoPanel(lancamentos, etapaId) {
+    _renderHistoricoPanel(lancamentos, etapaId, prestacaoSourceId) {
         const panelId = `hist-panel-${etapaId}`;
         let rows = '';
 
@@ -275,12 +277,24 @@ window.Etapas = {
                 </tr>`;
         }
 
+        // Botão para abrir arquivo fonte da prestação
+        const openFileBtn = prestacaoSourceId
+            ? `<button class="btn btn-ghost btn-xs hist-open-file" onclick="event.stopPropagation(); Etapas.openViewer('/api/v1/sessions/${this.sessionId}/sources/${prestacaoSourceId}/file', 'text/plain', 'Prestação GoSATI')" title="Abrir arquivo da prestação">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                Arquivo
+               </button>`
+            : '';
+
         return `
             <div class="historico-panel">
                 <div class="historico-panel-header" onclick="Etapas.toggleHistoricoPanel('${panelId}')">
                     <span class="historico-panel-chevron" id="hist-chev-${panelId}">▶</span>
                     <span class="historico-panel-title">Dados do Histórico</span>
                     <span class="historico-panel-count">${lancamentos.length} lançamentos</span>
+                    ${openFileBtn}
                 </div>
                 <div class="historico-panel-body hidden" id="hist-body-${panelId}">
                     <table class="historico-table">
@@ -564,6 +578,7 @@ window.Etapas = {
             },
             onResult: (result) => {
                 // Resultado estruturado (JSON lançamentos)
+                this._currentPrestacaoSourceId = result.prestacao_source_id || null;
                 etapa.result_text = JSON.stringify(result);
 
                 const loading = document.getElementById(`etapa-loading-${etapaId}`);

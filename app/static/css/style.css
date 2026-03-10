@@ -1119,6 +1119,15 @@ dialog.modal h2 { margin-bottom: 16px; font-size: 1.15rem; font-weight: 500; }
     padding: 2px 8px;
     border-radius: 10px;
 }
+.hist-open-file {
+    font-size: 0.7rem !important;
+    padding: 2px 8px !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent) !important;
+    margin-left: 4px;
+}
 .historico-panel-body {
     border-top: 1px solid var(--border);
     max-height: 400px;
