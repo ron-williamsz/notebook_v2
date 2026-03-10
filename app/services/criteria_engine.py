@@ -187,56 +187,58 @@ class CriteriaEngine:
                 found = True
                 found_detail = f"{config.documento_nome} encontrado (histórico: {nf_ref})"
 
-            # Filtra docs pelo mime_type (se configurado)
-            mime_candidates: list[dict] = []
-            if not found:
-                for doc in docs:
-                    if config.mime_types:
-                        doc_mime = doc.get("mime_type", "")
-                        if not any(mt in doc_mime for mt in config.mime_types):
-                            continue
-                    mime_candidates.append(doc)
-                if not config.mime_types:
-                    mime_candidates = docs
+            # Se o histórico diz explicitamente "SEM NF", não buscar nos docs
+            # (evita falso positivo por keyword "nf" dentro de labels como "SEM NF")
+            if not explicitly_absent:
+                # Filtra docs pelo mime_type (se configurado)
+                mime_candidates: list[dict] = []
+                if not found:
+                    for doc in docs:
+                        if config.mime_types:
+                            doc_mime = doc.get("mime_type", "")
+                            if not any(mt in doc_mime for mt in config.mime_types):
+                                continue
+                        mime_candidates.append(doc)
+                    if not config.mime_types:
+                        mime_candidates = docs
 
-            # --- Camada 1: keyword match em label + filename + texto extraído ---
-            if not found:
-                for doc in mime_candidates:
-                    parts = []
-                    if doc.get("label"):
-                        parts.append(doc["label"])
-                    if doc.get("filename"):
-                        parts.append(doc["filename"])
-                    if doc.get("texto_extraido"):
-                        parts.append(doc["texto_extraido"])
-                    texto = " ".join(parts).lower()
+                # --- Camada 1: keyword match em label + filename + texto extraído ---
+                if not found:
+                    for doc in mime_candidates:
+                        parts = []
+                        if doc.get("label"):
+                            parts.append(doc["label"])
+                        if doc.get("filename"):
+                            parts.append(doc["filename"])
+                        if doc.get("texto_extraido"):
+                            parts.append(doc["texto_extraido"])
+                        texto = " ".join(parts).lower()
 
-                    if any(kw in texto for kw in kw_lower):
-                        found = True
-                        found_detail = f"{config.documento_nome} encontrado"
-                        break
+                        if any(kw in texto for kw in kw_lower):
+                            found = True
+                            found_detail = f"{config.documento_nome} encontrado"
+                            break
 
-            # --- Camada 2: label não-genérico do GoSATI ---
-            if not found and mime_candidates:
-                for doc in mime_candidates:
-                    label = (doc.get("label") or "").lower()
-                    tipo_part = label.split("lanç.")[0].strip() if "lanç." in label else ""
-                    if tipo_part.startswith("documento pdf"):
-                        tipo_part = ""
-                    if tipo_part and tipo_part not in _GENERIC_LABELS:
-                        found = True
-                        found_detail = f"{config.documento_nome} encontrado ({tipo_part.strip().title()})"
-                        break
+                # --- Camada 2: label não-genérico do GoSATI ---
+                if not found and mime_candidates:
+                    for doc in mime_candidates:
+                        label = (doc.get("label") or "").lower()
+                        tipo_part = label.split("lanç.")[0].strip() if "lanç." in label else ""
+                        if tipo_part.startswith("documento pdf"):
+                            tipo_part = ""
+                        if tipo_part and tipo_part not in _GENERIC_LABELS:
+                            found = True
+                            found_detail = f"{config.documento_nome} encontrado ({tipo_part.strip().title()})"
+                            break
 
-            # --- Camada 3: fallback por existência de doc do mime correto ---
-            # Se não está explicitamente ausente e tem docs, considerar presente
-            if not found and not explicitly_absent and mime_candidates and config.mime_types:
-                found = True
-                found_detail = f"{config.documento_nome} encontrado (documento presente)"
-                logger.debug(
-                    "presenca fallback: lanç=%s, %d docs mime-compatible",
-                    num, len(mime_candidates),
-                )
+                # --- Camada 3: fallback por existência de doc do mime correto ---
+                if not found and mime_candidates and config.mime_types:
+                    found = True
+                    found_detail = f"{config.documento_nome} encontrado (documento presente)"
+                    logger.debug(
+                        "presenca fallback: lanç=%s, %d docs mime-compatible",
+                        num, len(mime_candidates),
+                    )
 
             if found:
                 results.append(CriterionResult(
