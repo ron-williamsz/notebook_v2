@@ -1,5 +1,5 @@
 """Etapas — CRUD e execução de Etapas dentro de uma sessão."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,13 +36,13 @@ async def create_etapa(
 async def execute_etapa(
     session_id: int,
     etapa_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ):
     svc = EtapaService(db, settings)
-    # Condomínio é fixo por notebook (definido na criação), usa session.gosati_condominio_codigo
     return StreamingResponse(
-        svc.execute(session_id, etapa_id),
+        svc.execute(session_id, etapa_id, request=request),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

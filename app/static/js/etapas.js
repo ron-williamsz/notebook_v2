@@ -6,6 +6,7 @@ window.Etapas = {
     sessionId: null,
     etapas: [],
     executing: {},
+    _abortControllers: {},
 
     async init(sessionId) {
         this.sessionId = sessionId;
@@ -41,6 +42,7 @@ window.Etapas = {
             running: 'Executando...',
             done: 'Concluído',
             error: 'Erro',
+            cancelled: 'Cancelado',
         };
         const statusLabel = statusLabels[etapa.status] || etapa.status;
 
@@ -50,6 +52,7 @@ window.Etapas = {
                 <div class="etapa-card-loading" id="etapa-loading-${etapa.id}">
                     <div class="spinner"></div>
                     <span id="etapa-progress-${etapa.id}">Processando...</span>
+                    <button class="btn-stop" onclick="Etapas.stop(${etapa.id})" title="Parar execução">■</button>
                 </div>`;
         } else if (etapa.status === 'error' && etapa.error_message) {
             bodyHtml = `<div class="etapa-card-body" style="color:var(--error)">${Utils.escapeHtml(etapa.error_message)}</div>`;
@@ -58,7 +61,7 @@ window.Etapas = {
         }
 
         const isRunning = etapa.status === 'running' || this.executing[etapa.id];
-        const showExecute = etapa.status === 'pending' || etapa.status === 'error';
+        const showExecute = etapa.status === 'pending' || etapa.status === 'error' || etapa.status === 'cancelled';
         const showRerun = etapa.status === 'done';
 
         let actionsHtml = '';
@@ -471,6 +474,8 @@ window.Etapas = {
         if (!etapa) return;
 
         this.executing[etapaId] = true;
+        const abortController = new AbortController();
+        this._abortControllers[etapaId] = abortController;
         etapa.status = 'running';
         etapa.result_text = null;
         etapa.error_message = null;
@@ -481,6 +486,7 @@ window.Etapas = {
 
         try {
           await API.executeEtapaStream(this.sessionId, etapaId, {
+            signal: abortController.signal,
             onProgress: (msg) => {
                 const progress = document.getElementById(`etapa-progress-${etapaId}`);
                 if (progress) progress.textContent = msg;
@@ -573,6 +579,7 @@ window.Etapas = {
             },
             onDone: () => {
                 delete this.executing[etapaId];
+                delete this._abortControllers[etapaId];
 
                 // Remove spinners das seções de step
                 document.querySelectorAll(`[id^="step-section-step-${etapaId}"] .spinner`).forEach(s => s.remove());
@@ -610,10 +617,21 @@ window.Etapas = {
           });
         } catch (err) {
             delete this.executing[etapaId];
-            etapa.status = 'error';
-            etapa.error_message = err.message || 'Erro de rede durante execução';
+            delete this._abortControllers[etapaId];
+            if (err.name === 'AbortError') {
+                etapa.status = 'cancelled';
+                etapa.error_message = 'Execução cancelada pelo usuário';
+            } else {
+                etapa.status = 'error';
+                etapa.error_message = err.message || 'Erro de rede durante execução';
+            }
             this.render();
         }
+    },
+
+    stop(etapaId) {
+        const controller = this._abortControllers[etapaId];
+        if (controller) controller.abort();
     },
 
     async remove(etapaId) {

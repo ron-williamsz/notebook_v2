@@ -1351,6 +1351,30 @@ dialog.modal h2 { margin-bottom: 16px; font-size: 1.15rem; font-weight: 500; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.btn-stop {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--error);
+    color: var(--error);
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-xs, 4px);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    line-height: 1;
+    transition: background 0.15s;
+    flex-shrink: 0;
+}
+.btn-stop:hover {
+    background: rgba(242, 139, 130, 0.2);
+}
+.etapa-card.cancelled {
+    border-left-color: var(--warning, #fdd663) !important;
+}
+
 .etapa-card-actions {
     display: flex;
     align-items: center;

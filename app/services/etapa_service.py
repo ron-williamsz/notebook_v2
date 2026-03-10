@@ -6,6 +6,7 @@ Pipeline:
   3. Retorna lista estruturada de lançamentos com referência aos documentos
   4. Análise IA dos lançamentos + documentos via Gemini (se skill tiver macro_instruction)
 """
+import asyncio
 import json
 import logging
 import re
@@ -145,7 +146,9 @@ class EtapaService:
     # ------------------------------------------------------------------
 
     async def execute(
-        self, session_id: int, etapa_id: int, cond_codigo_override: int | None = None
+        self, session_id: int, etapa_id: int,
+        cond_codigo_override: int | None = None,
+        request=None,
     ) -> AsyncGenerator[str, None]:
         """Busca lançamentos, documentos e executa análise IA via Gemini."""
         etapa = await self.db.get(Etapa, etapa_id)
@@ -155,6 +158,10 @@ class EtapaService:
         etapa.status = "running"
         etapa.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
+
+        async def _check_cancelled():
+            if request and await request.is_disconnected():
+                raise asyncio.CancelledError("Client disconnected")
 
         try:
             skill = await self.skill_svc.get_by_id(etapa.skill_id)
@@ -170,10 +177,14 @@ class EtapaService:
                 for msg in progress_msgs:
                     yield f"data: {json.dumps({'progress': msg})}\n\n"
 
+            await _check_cancelled()
+
             # Fase 2: Monta resultado estruturado
             yield f"data: {json.dumps({'progress': 'Organizando lançamentos...'})}\n\n"
             result = await self._build_lancamentos_result(session_id)
             yield f"data: {json.dumps({'result': result})}\n\n"
+
+            await _check_cancelled()
 
             # Fase 3: Execução por modo
             await self.db.refresh(skill, ["steps", "examples", "criteria"])
@@ -183,7 +194,7 @@ class EtapaService:
                 yield f"data: {json.dumps({'progress': 'Executando critérios...'})}\n\n"
                 criteria_result = await self._execute_criteria(
                     session_id, skill, result,
-                    progress_cb=lambda msg: None,  # progress via SSE below
+                    progress_cb=lambda msg: None,
                 )
                 result["type"] = "criterios"
                 result["criterios"] = criteria_result
@@ -197,6 +208,7 @@ class EtapaService:
                 step_results = []
 
                 for i, step in enumerate(skill.steps):
+                    await _check_cancelled()
                     step_title = step.title or f"Etapa {i + 1}"
                     yield f"data: {json.dumps({'progress': f'Analisando: {step_title}...'})}\n\n"
                     yield f"data: {json.dumps({'step_start': {'index': i, 'title': step_title}})}\n\n"
@@ -205,6 +217,7 @@ class EtapaService:
                     async for chunk in self._run_step_analysis(
                         skill, step, base_parts, result
                     ):
+                        await _check_cancelled()
                         step_text += chunk
                         yield f"data: {json.dumps({'step_chunk': {'index': i, 'text': chunk}})}\n\n"
 
@@ -223,6 +236,14 @@ class EtapaService:
             await self.db.commit()
 
             yield "data: [DONE]\n\n"
+
+        except asyncio.CancelledError:
+            logger.info("Etapa %d cancelada pelo usuário", etapa_id)
+            etapa.status = "cancelled"
+            etapa.error_message = "Execução cancelada pelo usuário"
+            etapa.updated_at = datetime.now(timezone.utc)
+            await self.db.commit()
+            yield f"data: {json.dumps({'error': 'Execução cancelada'})}\n\n"
 
         except Exception as e:
             logger.error(f"Erro ao executar etapa {etapa_id}: {e}")

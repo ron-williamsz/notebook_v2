@@ -182,9 +182,10 @@ window.API = {
     createEtapa(sessionId, skillId) {
         return this.request('POST', `/sessions/${sessionId}/etapas`, { body: { skill_id: skillId } });
     },
-    async executeEtapaStream(sessionId, etapaId, { onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult } = {}) {
+    async executeEtapaStream(sessionId, etapaId, { onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult, signal } = {}) {
         const resp = await fetch(`${this.baseUrl}/sessions/${sessionId}/etapas/${etapaId}/execute`, {
             method: 'POST',
+            signal,
         });
         await this._readStream(resp, onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult);
     },
