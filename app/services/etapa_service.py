@@ -589,6 +589,7 @@ class EtapaService:
             saved = await gosati_svc.save_comprovantes_as_sources(
                 session_id=session_id,
                 despesas=despesas_com_link,
+                gemini_client=self._gemini_client,
             )
             logger.info(
                 "Auto-fetch: %d comprovantes baixados para sessão %d",

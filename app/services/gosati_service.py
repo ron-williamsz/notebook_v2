@@ -14,7 +14,7 @@ from app.core.config import BASE_DIR, Settings
 from app.core.exceptions import NotFoundError
 from app.models.session import Session
 from app.models.source import Source
-from app.services.document_converter import extract_text_from_pdf
+from app.services.document_converter import extract_text_from_image, extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
 
@@ -904,6 +904,7 @@ class GoSatiService:
         self,
         session_id: int,
         despesas: list[dict],
+        gemini_client=None,
     ) -> list[Source]:
         """Baixa comprovantes via SOAP (catalogo_id) e salva como Source.
 
@@ -954,7 +955,7 @@ class GoSatiService:
                 file_path = save_dir / filename
                 file_path.write_bytes(doc_bytes)
 
-                # Extrai texto de PDFs
+                # Extrai texto de PDFs e imagens
                 text_path = ""
                 is_native = True
                 if mime_type == "application/pdf":
@@ -967,6 +968,23 @@ class GoSatiService:
                             is_native = False
                     except Exception as e:
                         logger.warning("Falha extração PDF %s: %s", filename, e)
+                elif (
+                    mime_type.startswith("image/")
+                    and gemini_client is not None
+                    and self.settings.gemini_image_ocr
+                ):
+                    try:
+                        extracted = await extract_text_from_image(
+                            doc_bytes, mime_type, gemini_client,
+                            model=self.settings.gemini_model,
+                        )
+                        if extracted.strip():
+                            txt_file = file_path.with_suffix(".extracted.txt")
+                            txt_file.write_text(extracted, encoding="utf-8")
+                            text_path = str(txt_file)
+                            is_native = False
+                    except Exception as e:
+                        logger.warning("Falha extração imagem %s: %s", filename, e)
 
                 # Label rico usando metadata do catálogo
                 cat_titulo = catalog_meta.get("titulo", "")
@@ -977,7 +995,7 @@ class GoSatiService:
                     doc_type = cat_titulo
                 elif total_docs == 1:
                     doc_type = "Comprovante"
-                elif ext == ".pdf":
+                elif text_path:
                     doc_type = _pdf_label_with_hint(text_path)
                 else:
                     doc_type = "Comprovante de Pagamento"

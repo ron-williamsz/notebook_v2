@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     gemini_location: str = "global"
     gemini_max_output_tokens: int = 8192
     gemini_temperature: float = 0.3
+    gemini_image_ocr: bool = True
 
     # GoSATI / Zangari
     zangari_usuario: str = ""

@@ -212,6 +212,55 @@ def _try_pypdf(content: bytes, max_pages: int) -> str:
         return ""
 
 
+async def extract_text_from_image(
+    content: bytes,
+    mime_type: str,
+    gemini_client,
+    model: str = "gemini-2.5-flash",
+) -> str:
+    """Extrai texto de imagem usando Gemini Vision.
+
+    Args:
+        content: bytes da imagem
+        mime_type: tipo MIME (image/jpeg, image/png, etc.)
+        gemini_client: cliente google.genai pré-inicializado
+        model: modelo Gemini a usar
+
+    Returns:
+        Texto extraído ou string vazia em caso de falha
+    """
+    from google.genai.types import Content, GenerateContentConfig, Part
+
+    parts = [
+        Part.from_bytes(data=content, mime_type=mime_type),
+        Part.from_text(text=(
+            "Transcreva TODO o conteudo textual visivel nesta imagem de documento. "
+            "Inclua: tipo do documento (ex: DANFE, nota fiscal, boleto, recibo, guia, "
+            "comprovante de pagamento, holerite, etc), valores monetarios, datas, "
+            "nomes de empresas/pessoas, numeros de documento, CNPJ/CPF. "
+            "Mantenha a estrutura original. "
+            "Se nao conseguir ler a imagem ou nao houver texto, responda apenas: [ilegivel]"
+        )),
+    ]
+
+    try:
+        response = await gemini_client.aio.models.generate_content(
+            model=model,
+            contents=[Content(role="user", parts=parts)],
+            config=GenerateContentConfig(
+                max_output_tokens=2048,
+                temperature=0.1,
+            ),
+        )
+        text = (response.text or "").strip()
+        if text == "[ilegivel]" or not text:
+            return ""
+        return text
+    except Exception as e:
+        logger.warning("Falha extração texto de imagem via Gemini: %s", e)
+        return ""
+
+
 def _calc_col_widths(rows: list[list[str]], max_width: int = 40) -> list[int]:
     """Calcula largura ideal de cada coluna para formatação tabular."""
     if not rows:
