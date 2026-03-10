@@ -175,19 +175,20 @@ class CriteriaEngine:
             explicitly_absent = False
 
             # --- Camada 0: análise do histórico do lançamento ---
-            # O histórico do GoSATI frequentemente indica se a NF existe:
-            #   "EMPRESA X - SERVIÇO Y - NFE 12345" → tem NF
-            #   "EMPRESA X - AQUISIÇÃO - SEM NF"    → não tem NF
-            if self._RE_HISTORICO_SEM_NF.search(historico):
+            # "SEM NF" só se aplica a documentos tipo nota fiscal, não comprovantes
+            is_nf_related = any(
+                term in config.documento_nome.lower()
+                for term in ("nota fiscal", "nf", "nfe", "danfe")
+            )
+            if is_nf_related and self._RE_HISTORICO_SEM_NF.search(historico):
                 explicitly_absent = True
-            elif self._RE_HISTORICO_TEM_NF.search(historico):
-                # O histórico referencia uma NF — marcar como encontrado
+            elif is_nf_related and self._RE_HISTORICO_TEM_NF.search(historico):
                 m = self._RE_HISTORICO_TEM_NF.search(historico)
                 nf_ref = m.group(0).strip() if m else "NF"
                 found = True
                 found_detail = f"{config.documento_nome} encontrado (histórico: {nf_ref})"
 
-            # Se o histórico diz explicitamente "SEM NF", não buscar nos docs
+            # Se explicitamente ausente, não buscar nos docs
             # (evita falso positivo por keyword "nf" dentro de labels como "SEM NF")
             if not explicitly_absent:
                 # Filtra docs pelo mime_type (se configurado)
@@ -322,8 +323,12 @@ class CriteriaEngine:
             docs = docs_by_lanc.get(num, [])
             historico = lanc.get("historico", "")
 
-            # Se o histórico indica explicitamente "SEM NF", pula
-            if self._RE_HISTORICO_SEM_NF.search(historico):
+            # Se o histórico indica "SEM NF", só pula se buscando nota fiscal
+            is_nf_search = any(
+                term in config.buscar_em.lower()
+                for term in ("nota fiscal", "nf", "nfe", "danfe")
+            )
+            if is_nf_search and self._RE_HISTORICO_SEM_NF.search(historico):
                 results.append(CriterionResult(
                     lancamento=num,
                     criterio_nome=criterio_nome,
