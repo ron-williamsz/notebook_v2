@@ -1,7 +1,7 @@
 """Database engine e inicialização com SQLModel async."""
 import logging
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
@@ -11,8 +11,21 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
-engine = create_async_engine(settings.database_url, echo=False)
+engine = create_async_engine(
+    settings.database_url,
+    echo=False,
+    connect_args={"timeout": 30},
+)
 async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+# WAL mode + busy_timeout para suportar concorrência (app + worker)
+@event.listens_for(engine.sync_engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
 
 
 async def _migrate_add_columns(conn) -> None:

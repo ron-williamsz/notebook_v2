@@ -12,8 +12,40 @@ services:
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
     restart: unless-stopped
+    depends_on:
+      - redis
     networks:
       - default
+
+  worker:
+    build: .
+    container_name: notebook-zang-worker
+    command: ["python", "-m", "app.worker"]
+    volumes:
+      - ./data:/app/data
+      - ./notebooklm-487919-5e3793cd3866.json:/root/.config/gcloud/application_default_credentials.json:ro
+    env_file:
+      - .env
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+    restart: unless-stopped
+    depends_on:
+      - redis
+    networks:
+      - default
+
+  redis:
+    image: redis:7-alpine
+    container_name: notebook-zang-redis
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - default
+
+volumes:
+  redis_data:
 
 networks:
   default:

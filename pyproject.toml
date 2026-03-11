@@ -30,6 +30,10 @@ dependencies = [
     # IA / LLM
     "google-genai>=1.0.0",
 
+    # Queue / Redis
+    "arq>=0.26.0",
+    "redis[hiredis]>=5.0.0",
+
     # Documentos
     "pdfplumber>=0.11.0",
     "pypdf>=4.0.0",

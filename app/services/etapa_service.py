@@ -273,17 +273,21 @@ class EtapaService:
         finally:
             # Safety net: se o generator parou de ser consumido (conexão SSE caiu)
             # e o status ainda está "running", corrige para o estado correto.
-            await self.db.refresh(etapa)
-            if etapa.status == "running":
-                if etapa.result_text:
-                    etapa.status = "done"
-                    logger.info("Etapa %d: SSE desconectou mas resultado já salvo → done", etapa_id)
-                else:
-                    etapa.status = "error"
-                    etapa.error_message = "Conexão perdida durante execução"
-                    logger.warning("Etapa %d: SSE desconectou sem resultado → error", etapa_id)
-                etapa.updated_at = datetime.now(timezone.utc)
-                await self.db.commit()
+            try:
+                await self.db.rollback()  # limpa qualquer transação pendente
+                await self.db.refresh(etapa)
+                if etapa.status == "running":
+                    if etapa.result_text:
+                        etapa.status = "done"
+                        logger.info("Etapa %d: SSE desconectou mas resultado já salvo → done", etapa_id)
+                    else:
+                        etapa.status = "error"
+                        etapa.error_message = "Conexão perdida durante execução"
+                        logger.warning("Etapa %d: SSE desconectou sem resultado → error", etapa_id)
+                    etapa.updated_at = datetime.now(timezone.utc)
+                    await self.db.commit()
+            except Exception as cleanup_err:
+                logger.warning("Etapa %d: cleanup falhou: %s", etapa_id, cleanup_err)
 
     async def _build_lancamentos_result(self, session_id: int) -> dict:
         """Monta estrutura de lançamentos com documentos a partir das Sources."""
@@ -632,45 +636,89 @@ class EtapaService:
         await self.db.commit()
 
         # 4. Filtra despesas com comprovante pelos mesmos filtros da Skill (OR multi-campo)
+        import unicodedata
+
+        def _strip_accents(text: str) -> str:
+            nfkd = unicodedata.normalize("NFKD", text)
+            return "".join(c for c in nfkd if not unicodedata.combining(c)).upper()
+
         filter_fields: dict[str, list[str]] = {}
         for key in ("nome_conta_despesas", "nome_sub_conta", "historico"):
             raw = filters.get(key, [])
             if isinstance(raw, str):
                 raw = [raw]
-            values = [v.upper() for v in raw if v.strip()]
+            values = [_strip_accents(v) for v in raw if v.strip()]
             if values:
                 filter_fields[key] = values
 
         if filter_fields:
             def _matches_desp(d: dict) -> bool:
                 for field, terms in filter_fields.items():
-                    if any(t in d.get(field, "").upper() for t in terms):
+                    val = _strip_accents(d.get(field, ""))
+                    if any(t in val for t in terms):
                         return True
                 return False
             despesas_com_link = [d for d in despesas_com_link if _matches_desp(d)]
 
         # 5. Baixa comprovantes via SOAP (catalogo_id → RetornaArquivo)
-        # Pula download se já existem docs binários (reutiliza de etapa anterior)
-        if despesas_com_link and not has_existing_docs:
-            if progress_cb:
-                progress_cb(f"Baixando comprovantes de {len(despesas_com_link)} lançamento(s)...")
-
-            saved = await gosati_svc.save_comprovantes_as_sources(
-                session_id=session_id,
-                despesas=despesas_com_link,
-                gemini_client=self._gemini_client,
-            )
-            logger.info(
-                "Auto-fetch: %d comprovantes baixados para sessão %d",
-                len(saved), session_id,
-            )
-        elif has_existing_docs:
-            if progress_cb:
-                progress_cb(f"Reutilizando {len(existing_gosati_docs)} comprovantes existentes...")
-            logger.info(
-                "Auto-fetch: reutilizando %d docs existentes para sessão %d",
-                len(existing_gosati_docs), session_id,
-            )
+        logger.info(
+            "Auto-fetch: %d despesas com link após filtros (sessão %d)",
+            len(despesas_com_link), session_id,
+        )
+        # Debug: verifica se 3938352 está incluído
+        _debug_lancs = [str(d.get("numero_lancamento","")) for d in despesas_com_link]
+        if "3938352" in _debug_lancs:
+            _d = next(d for d in despesas_com_link if str(d.get("numero_lancamento",""))=="3938352")
+            logger.info("DEBUG 3938352 INCLUÍDO: catalogo_id=%s", _d.get("catalogo_id",""))
+        else:
+            logger.info("DEBUG 3938352 NÃO ESTÁ em despesas_com_link")
+        if despesas_com_link:
+            if has_existing_docs:
+                # Filtra apenas despesas cujo comprovante ainda não foi baixado
+                existing_lanc_nums = set()
+                for src in existing_gosati_docs:
+                    m = re.search(r"Lanç\.(\d+)", src.label or "")
+                    if m:
+                        existing_lanc_nums.add(m.group(1))
+                missing = [
+                    d for d in despesas_com_link
+                    if str(d.get("numero_lancamento", "")) not in existing_lanc_nums
+                ]
+                logger.info(
+                    "Auto-fetch: despesas_com_link=%d, existing_lanc=%d, missing=%d",
+                    len(despesas_com_link), len(existing_lanc_nums), len(missing),
+                )
+                if missing:
+                    if progress_cb:
+                        progress_cb(f"Baixando {len(missing)} comprovante(s) faltante(s)...")
+                    saved = await gosati_svc.save_comprovantes_as_sources(
+                        session_id=session_id,
+                        despesas=missing,
+                        gemini_client=self._gemini_client,
+                    )
+                    logger.info(
+                        "Auto-fetch: %d comprovantes complementares para sessão %d",
+                        len(saved), session_id,
+                    )
+                else:
+                    if progress_cb:
+                        progress_cb(f"Reutilizando {len(existing_gosati_docs)} comprovantes existentes...")
+                    logger.info(
+                        "Auto-fetch: reutilizando %d docs existentes para sessão %d",
+                        len(existing_gosati_docs), session_id,
+                    )
+            else:
+                if progress_cb:
+                    progress_cb(f"Baixando comprovantes de {len(despesas_com_link)} lançamento(s)...")
+                saved = await gosati_svc.save_comprovantes_as_sources(
+                    session_id=session_id,
+                    despesas=despesas_com_link,
+                    gemini_client=self._gemini_client,
+                )
+                logger.info(
+                    "Auto-fetch: %d comprovantes baixados para sessão %d",
+                    len(saved), session_id,
+                )
 
         logger.info(
             "Auto-fetch GoSATI para etapa sessão %d (skill %s, cond %d, %02d/%d) — "

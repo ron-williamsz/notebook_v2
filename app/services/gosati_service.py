@@ -535,7 +535,8 @@ class GoSatiService:
                     continue
                 tem_docto = d.get("tem_docto", "0")
                 catalogo_id = d.get("catalogo_id", "")
-                if tem_docto == "1" and catalogo_id:
+                # Aceita tem_docto como string "1" ou int 1
+                if str(tem_docto) == "1" and catalogo_id:
                     despesas.append({
                         "numero_lancamento": d.get("numero_lancamento", ""),
                         "historico": d.get("historico", ""),
@@ -577,7 +578,13 @@ class GoSatiService:
             tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
             if "Result" in tag and elem.text:
                 data = json.loads(elem.text)
-                return data.get("Dados", [])
+                docs = data.get("Dados", [])
+                logger.info(
+                    "RetornaDadosDoctos catalogo=%s: %d documentos encontrados",
+                    catalogo_id, len(docs),
+                )
+                return docs
+        logger.warning("RetornaDadosDoctos catalogo=%s: nenhum Result no XML", catalogo_id)
         return []
 
     async def baixar_documento(self, catalogo_id: str, documento_id: str, extensao: str) -> bytes | None:
@@ -605,57 +612,75 @@ class GoSatiService:
         return None
 
     async def baixar_comprovantes_catalogo(self, catalogo_id: str) -> list[tuple[bytes, str, dict]]:
-        """Baixa TODOS os documentos de um catálogo.
+        """Baixa TODOS os documentos de um ou mais catálogos.
+
+        catalogo_id pode ser um único ID ou múltiplos IDs separados por vírgula
+        (ex: "2240134,2252575"). Cada catálogo é consultado separadamente e
+        todos os documentos são agregados na lista de retorno.
 
         Retorna lista de (bytes, mime_type, catalog_meta).
         catalog_meta contém: id_do_catalogo, id_do_documento, titulo, descricao, extensao_docto.
         """
         documents: list[tuple[bytes, str, dict]] = []
-        try:
-            doc_list = await self.listar_documentos_catalogo(catalogo_id)
-            if not doc_list:
-                return documents
 
-            for doc_info in doc_list:
-                doc_id = str(doc_info.get("id_do_documento", ""))
-                cat_id = str(doc_info.get("id_do_catalogo", ""))
-                ext = doc_info.get("extensao_docto", "").strip()
-                if not doc_id or not ext:
+        # Suporta catalogo_id com múltiplos IDs separados por vírgula
+        cat_ids = [cid.strip() for cid in catalogo_id.split(",") if cid.strip()]
+        if not cat_ids:
+            return documents
+
+        for single_cat_id in cat_ids:
+            try:
+                doc_list = await self.listar_documentos_catalogo(single_cat_id)
+                if not doc_list:
+                    logger.debug("Catálogo %s sem documentos", single_cat_id)
                     continue
 
-                file_bytes = await self.baixar_documento(cat_id or catalogo_id, doc_id, ext)
-                if not file_bytes:
-                    logger.warning(
-                        "RetornaArquivo vazio: catalogo=%s, doc=%s, ext=%s",
-                        cat_id, doc_id, ext,
-                    )
-                    continue
+                for doc_info in doc_list:
+                    doc_id = str(doc_info.get("id_do_documento", ""))
+                    cat_id = str(doc_info.get("id_do_catalogo", ""))
+                    ext = doc_info.get("extensao_docto", "").strip()
+                    if not doc_id or not ext:
+                        continue
 
-                mime = _detect_mime_type(file_bytes)
-                if not mime:
-                    # Fallback por extensão
-                    ext_map = {
-                        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-                        ".png": "image/png", ".gif": "image/gif",
-                        ".pdf": "application/pdf", ".bmp": "image/bmp",
+                    file_bytes = await self.baixar_documento(cat_id or single_cat_id, doc_id, ext)
+                    if not file_bytes:
+                        logger.warning(
+                            "RetornaArquivo vazio: catalogo=%s, doc=%s, ext=%s",
+                            cat_id, doc_id, ext,
+                        )
+                        continue
+
+                    mime = _detect_mime_type(file_bytes)
+                    if not mime:
+                        # Fallback por extensão
+                        ext_map = {
+                            ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                            ".png": "image/png", ".gif": "image/gif",
+                            ".pdf": "application/pdf", ".bmp": "image/bmp",
+                        }
+                        mime = ext_map.get(ext.lower(), "application/octet-stream")
+
+                    catalog_meta = {
+                        "id_do_catalogo": cat_id,
+                        "id_do_documento": doc_id,
+                        "titulo": (doc_info.get("titulo") or "").strip(),
+                        "descricao": (doc_info.get("descricao") or "").strip(),
+                        "extensao_docto": ext,
                     }
-                    mime = ext_map.get(ext.lower(), "application/octet-stream")
+                    documents.append((file_bytes, mime, catalog_meta))
+                    logger.debug(
+                        "Documento baixado: catalogo=%s doc=%s ext=%s titulo='%s' (%d bytes, %s)",
+                        cat_id, doc_id, ext, catalog_meta["titulo"], len(file_bytes), mime,
+                    )
 
-                catalog_meta = {
-                    "id_do_catalogo": cat_id,
-                    "id_do_documento": doc_id,
-                    "titulo": (doc_info.get("titulo") or "").strip(),
-                    "descricao": (doc_info.get("descricao") or "").strip(),
-                    "extensao_docto": ext,
-                }
-                documents.append((file_bytes, mime, catalog_meta))
-                logger.debug(
-                    "Documento baixado: catalogo=%s doc=%s ext=%s titulo='%s' (%d bytes, %s)",
-                    cat_id, doc_id, ext, catalog_meta["titulo"], len(file_bytes), mime,
-                )
+            except Exception as e:
+                logger.warning("Erro ao baixar documentos do catálogo %s: %s", single_cat_id, e)
 
-        except Exception as e:
-            logger.warning("Erro ao baixar documentos do catálogo %s: %s", catalogo_id, e)
+        if len(cat_ids) > 1:
+            logger.info(
+                "Catálogos [%s]: %d documentos baixados no total",
+                catalogo_id, len(documents),
+            )
         return documents
 
     # ------------------------------------------------------------------
@@ -922,9 +947,15 @@ class GoSatiService:
 
         for desp_idx, desp in enumerate(despesas):
             catalogo_id = str(desp.get("catalogo_id", ""))
+            lanc_num = desp.get("numero_lancamento", "?")
             if not catalogo_id:
+                logger.debug("Desp %s: sem catalogo_id, pulando", lanc_num)
                 continue
 
+            logger.info(
+                "Desp %s: buscando comprovantes catalogo_id='%s' (multi=%s)",
+                lanc_num, catalogo_id, "," in catalogo_id,
+            )
             documents = await self.baixar_comprovantes_catalogo(catalogo_id)
             if not documents:
                 logger.warning(

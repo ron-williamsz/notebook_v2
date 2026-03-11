@@ -378,8 +378,8 @@ class CriteriaEngine:
                 "criterio_nome": criterio_nome,
             })
 
-            # Processa em batches de 5
-            if len(batch) >= 5:
+            # Processa em batches de 10 (paralelo)
+            if len(batch) >= 10:
                 batch_results = await self._process_ai_batch(batch)
                 results.extend(batch_results)
                 batch = []
@@ -392,24 +392,24 @@ class CriteriaEngine:
         return results
 
     async def _process_ai_batch(self, batch: list[dict]) -> list[CriterionResult]:
-        """Processa um batch de conferências via Gemini."""
-        results = []
+        """Processa um batch de conferências via Gemini em paralelo."""
+        import asyncio
 
-        for item in batch:
+        async def _safe_check(item):
             try:
-                result = await self._ai_check_single(item)
-                results.append(result)
+                return await self._ai_check_single(item)
             except Exception as e:
                 logger.error("Erro IA conferência lanç. %s: %s", item["lancamento"], e)
-                results.append(CriterionResult(
+                return CriterionResult(
                     lancamento=item["lancamento"],
                     criterio_nome=item["criterio_nome"],
                     criterio_tipo="conferencia_conteudo",
                     resultado="DIVERGENCIA",
                     detalhes=f"Erro na conferência: {e}",
-                ))
+                )
 
-        return results
+        results = await asyncio.gather(*[_safe_check(item) for item in batch])
+        return list(results)
 
     async def _ai_check_single(self, item: dict) -> CriterionResult:
         """Executa conferência de um único lançamento via Gemini."""
@@ -433,7 +433,9 @@ class CriteriaEngine:
             f"Campo a localizar: {item['campo']}\n"
             f"Valor de referência: {item['ref_value']}\n"
             f"{instrucao_extra}\n\n"
-            f"Responda em JSON: {{\"valor_encontrado\": \"...\", \"confere\": true/false, \"observacao\": \"...\"}}"
+            f"IMPORTANTE: Seja CONCISO. O campo 'valor_encontrado' deve conter APENAS o valor extraído "
+            f"(número, data ou texto curto), NÃO descrições longas.\n\n"
+            f"Responda em JSON: {{\"valor_encontrado\": \"...\", \"confere\": true/false, \"observacao\": \"breve\"}}"
         )
         parts.append(Part.from_text(text=prompt))
 
@@ -441,26 +443,57 @@ class CriteriaEngine:
             model=self._settings.gemini_model,
             contents=[Content(role="user", parts=parts)],
             config=GenerateContentConfig(
-                system_instruction="Você é um auditor. Analise o documento e responda APENAS em JSON.",
-                max_output_tokens=1024,
+                system_instruction="Você é um auditor. Analise o documento e responda APENAS em JSON conciso. Mantenha valor_encontrado curto (só o valor).",
+                max_output_tokens=4096,
                 temperature=0.1,
                 response_mime_type="application/json",
             ),
         )
 
+        # Debug: log finish_reason quando truncado por MAX_TOKENS
+        if response.candidates:
+            candidate = response.candidates[0]
+            finish = getattr(candidate, "finish_reason", None)
+            finish_str = str(finish) if finish else ""
+            if "MAX_TOKENS" in finish_str:
+                logger.warning(
+                    "Conferência lanç. %s: finish_reason=%s (campo=%s)",
+                    item["lancamento"], finish, item["campo"],
+                )
+
         ai_result = self._parse_ai_json(response.text)
-        if ai_result is None:
+        # Normaliza: se retornou lista, pega primeiro dict
+        if isinstance(ai_result, list):
+            ai_result = ai_result[0] if ai_result and isinstance(ai_result[0], dict) else None
+        if ai_result is None or not isinstance(ai_result, dict):
+            logger.warning(
+                "Conferência lanç. %s: resposta IA não-JSON (campo=%s, ref=%s). "
+                "finish_reason=%s, Raw: %s",
+                item["lancamento"], item["campo"], item["ref_value"],
+                response.candidates[0].finish_reason if response.candidates else "N/A",
+                response.text[:500] if response.text else "vazio",
+            )
             return CriterionResult(
                 lancamento=item["lancamento"],
                 criterio_nome=item["criterio_nome"],
                 criterio_tipo="conferencia_conteudo",
                 resultado="DIVERGENCIA",
-                detalhes=f"Resposta IA não-JSON: {response.text[:200] if response.text else 'vazio'}",
+                detalhes=f"Resposta IA não-JSON: {str(response.text)[:200] if response.text else 'vazio'}",
             )
 
         confere = ai_result.get("confere", False)
         valor_encontrado = ai_result.get("valor_encontrado", "")
         observacao = ai_result.get("observacao", "")
+
+        # Normaliza: se Gemini retornou dict/list em vez de string, converte
+        if isinstance(valor_encontrado, (dict, list)):
+            valor_encontrado = json.dumps(valor_encontrado, ensure_ascii=False)
+        else:
+            valor_encontrado = str(valor_encontrado) if valor_encontrado else ""
+        if isinstance(observacao, (dict, list)):
+            observacao = json.dumps(observacao, ensure_ascii=False)
+        else:
+            observacao = str(observacao) if observacao else ""
 
         return CriterionResult(
             lancamento=item["lancamento"],
@@ -669,8 +702,8 @@ class CriteriaEngine:
             model=self._settings.gemini_model,
             contents=[Content(role="user", parts=parts)],
             config=GenerateContentConfig(
-                system_instruction="Você é um auditor. Extraia o valor solicitado do documento e responda APENAS em JSON.",
-                max_output_tokens=1024,
+                system_instruction="Você é um auditor. Extraia o valor solicitado do documento e responda APENAS em JSON conciso.",
+                max_output_tokens=4096,
                 temperature=0.1,
                 response_mime_type="application/json",
             ),
@@ -678,6 +711,11 @@ class CriteriaEngine:
 
         ai_result = self._parse_ai_json(response.text)
         if ai_result is None:
+            logger.warning(
+                "Conferência soma: resposta IA não-JSON. finish_reason=%s, Raw: %s",
+                response.candidates[0].finish_reason if response.candidates else "N/A",
+                response.text[:500] if response.text else "vazio",
+            )
             return {
                 "valor_encontrado": "",
                 "confere": False,
@@ -726,7 +764,7 @@ class CriteriaEngine:
 
     @staticmethod
     def _parse_ai_json(text: str | None) -> dict | None:
-        """Parseia JSON da resposta IA, tolerando markdown wrappers."""
+        """Parseia JSON da resposta IA, tolerando markdown wrappers e truncamento."""
         if not text:
             return None
         # Tentativa direta
@@ -741,13 +779,40 @@ class CriteriaEngine:
             return json.loads(cleaned)
         except (json.JSONDecodeError, ValueError):
             pass
-        # Extrai primeiro objeto JSON { ... }
-        m = re.search(r"\{[^{}]*\}", text, re.DOTALL)
+        # Extrai primeiro objeto JSON { ... } (suporta aninhamento)
+        m = re.search(r"\{.*\}", text, re.DOTALL)
         if m:
             try:
                 return json.loads(m.group(0))
             except (json.JSONDecodeError, ValueError):
                 pass
+        # JSON truncado: tenta fechar aspas e chaves
+        m = re.search(r"\{.*", text, re.DOTALL)
+        if m:
+            fragment = m.group(0).rstrip()
+            # Remove último par key:value incompleto (após última vírgula válida)
+            # Ex: {"valor_encontrado": "ok", "confere": true, "observ → remove ", "observ"
+            last_complete = fragment
+            for attempt in range(3):
+                # Fecha string aberta
+                if last_complete.count('"') % 2 == 1:
+                    last_complete += '"'
+                # Fecha chaves
+                open_braces = last_complete.count("{") - last_complete.count("}")
+                last_complete += "}" * max(0, open_braces)
+                try:
+                    return json.loads(last_complete)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                # Tenta remover o último campo incompleto
+                # Busca última vírgula fora de string
+                comma_pos = fragment.rfind(",")
+                if comma_pos > 0:
+                    last_complete = fragment[:comma_pos]
+                    fragment = last_complete
+                else:
+                    break
+            logger.debug("JSON truncado irrecuperável: %s", text[:300])
         return None
 
     @staticmethod

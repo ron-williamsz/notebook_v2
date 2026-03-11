@@ -23,6 +23,9 @@ window.Notebook = {
             if (mesEl) mesEl.addEventListener('change', () => this._savePeriod());
             if (anoEl) anoEl.addEventListener('change', () => this._savePeriod());
 
+            // Inicializa Pipeline
+            Pipeline.init(this.sessionId);
+
             // Carrega componentes em paralelo
             await Promise.all([
                 Skills.init(this.sessionId),

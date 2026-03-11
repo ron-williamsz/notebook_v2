@@ -182,15 +182,106 @@ window.API = {
     createEtapa(sessionId, skillId) {
         return this.request('POST', `/sessions/${sessionId}/etapas`, { body: { skill_id: skillId } });
     },
-    async executeEtapaStream(sessionId, etapaId, { onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult, signal } = {}) {
-        const resp = await fetch(`${this.baseUrl}/sessions/${sessionId}/etapas/${etapaId}/execute`, {
-            method: 'POST',
-            signal,
-        });
-        await this._readStream(resp, onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult);
+    async executeEtapa(sessionId, etapaId) {
+        return this.request('POST', `/sessions/${sessionId}/etapas/${etapaId}/execute`);
+    },
+    async streamEtapaEvents(sessionId, etapaId, { onChunk, onDone, onProgress, onResult, onStepStart, onStepChunk, onCriteriaResult, signal } = {}) {
+        const resp = await fetch(`${this.baseUrl}/sessions/${sessionId}/etapas/${etapaId}/stream`, { signal });
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    if (data === '[DONE]') {
+                        if (onDone) onDone();
+                        return;
+                    }
+                    try {
+                        const parsed = JSON.parse(data);
+                        // Handle terminal events from worker
+                        if (parsed.type === 'done') {
+                            if (onDone) onDone();
+                            return;
+                        }
+                        if (parsed.type === 'error') {
+                            Utils.toast(parsed.error || 'Erro na execução', 'error');
+                            if (onDone) onDone();
+                            return;
+                        }
+                        // Forward same SSE events as before
+                        if (parsed.criteria_result && onCriteriaResult) onCriteriaResult(parsed.criteria_result);
+                        else if (parsed.result && onResult) onResult(parsed.result);
+                        else if (parsed.step_start && onStepStart) onStepStart(parsed.step_start);
+                        else if (parsed.step_chunk && onStepChunk) onStepChunk(parsed.step_chunk);
+                        else if (parsed.text && onChunk) onChunk(parsed.text);
+                        if (parsed.progress && onProgress) onProgress(parsed.progress);
+                        if (parsed.error) {
+                            Utils.toast(parsed.error, 'error');
+                            if (onDone) onDone();
+                            return;
+                        }
+                    } catch { /* skip */ }
+                }
+            }
+        }
+        if (onDone) onDone();
     },
     deleteEtapa(sessionId, etapaId) {
         return this.request('DELETE', `/sessions/${sessionId}/etapas/${etapaId}`);
+    },
+
+    // === Pipeline (Executar Todas) ===
+    startPipeline(sessionId) {
+        return this.request('POST', `/sessions/${sessionId}/pipeline/start`);
+    },
+    getPipelineStatus(sessionId) {
+        return this.request('GET', `/sessions/${sessionId}/pipeline/status`);
+    },
+    cancelPipeline(sessionId) {
+        return this.request('POST', `/sessions/${sessionId}/pipeline/cancel`);
+    },
+    getPipelineSummary(sessionId) {
+        return this.request('GET', `/sessions/${sessionId}/pipeline/summary`);
+    },
+    async streamPipeline(sessionId, { onEvent, onDone, signal } = {}) {
+        const resp = await fetch(`${this.baseUrl}/sessions/${sessionId}/pipeline/stream`, { signal });
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    if (data === '[DONE]') {
+                        if (onDone) onDone();
+                        return;
+                    }
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (onEvent) onEvent(parsed);
+                    } catch { /* skip */ }
+                }
+            }
+        }
+        if (onDone) onDone();
     },
 
     // === GoSATI Selection Persistence ===

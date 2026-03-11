@@ -8,8 +8,9 @@ from fastapi.staticfiles import StaticFiles
 from app.core.dependencies import require_auth
 from app.core.exception_handlers import register_handlers
 from app.core.http_client import close_client, init_client
+from app.core.redis import close_redis
 from app.models.base import init_db
-from app.routers import auth, chat, condominios, conferencia, etapas, gosati, pages, sessions, skills, sources
+from app.routers import auth, chat, condominios, conferencia, etapas, gosati, pages, pipeline, sessions, skills, sources
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
     await init_client()
     await init_db()
     yield
+    await close_redis()
     await close_client()
 
 
@@ -47,6 +49,7 @@ app.include_router(gosati.gosati_utils_router, prefix="/api/v1", dependencies=[D
 app.include_router(condominios.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
 app.include_router(conferencia.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
 app.include_router(etapas.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
+app.include_router(pipeline.router, prefix="/api/v1", dependencies=[Depends(require_auth)])
 
 # HTML pages (auth handled per-route in pages.py)
 app.include_router(pages.router)

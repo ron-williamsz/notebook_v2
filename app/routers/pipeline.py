@@ -1,10 +1,12 @@
-"""Etapas — CRUD e execução de Etapas dentro de uma sessão."""
+"""Pipeline — execução sequencial de todas as skills."""
 import asyncio
 import json
+import logging
+import time
 
 from arq import create_pool
 from arq.connections import RedisSettings
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,11 +15,11 @@ from urllib.parse import urlparse
 from app.core.config import Settings, get_settings
 from app.core.redis import get_redis
 from app.models.base import get_db
-from app.schemas.etapa import EtapaCreate
-from app.services.etapa_service import EtapaService
-from app.services.pipeline_service import ETAPA_CHANNEL
+from app.services.pipeline_service import PipelineService, PIPELINE_CHANNEL
 
-router = APIRouter(prefix="/sessions/{session_id}/etapas", tags=["Etapas"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/sessions/{session_id}/pipeline", tags=["Pipeline"])
 
 
 def _arq_redis_settings(url: str) -> RedisSettings:
@@ -30,61 +32,74 @@ def _arq_redis_settings(url: str) -> RedisSettings:
     )
 
 
-@router.get("")
-async def list_etapas(
+@router.post("/start")
+async def start_pipeline(
     session_id: int,
     db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-):
-    svc = EtapaService(db, settings)
-    return await svc.list_by_session(session_id)
-
-
-@router.post("", status_code=201)
-async def create_etapa(
-    session_id: int,
-    data: EtapaCreate,
-    db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
-):
-    svc = EtapaService(db, settings)
-    return await svc.create(session_id, data.skill_id)
-
-
-@router.post("/{etapa_id}/execute")
-async def execute_etapa(
-    session_id: int,
-    etapa_id: int,
     settings: Settings = Depends(get_settings),
     redis: Redis = Depends(get_redis),
 ):
-    """Enfileira execução da etapa no worker ARQ (independente do browser)."""
+    """Inicia pipeline: cria etapas para todas as skills e enfileira execução."""
+    svc = PipelineService(db, settings, redis)
+    try:
+        result = await svc.start_pipeline(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     # Limpa resultado de job anterior (ARQ dedup por job_id)
-    old_result_key = f"arq:result:etapa-{etapa_id}"
+    old_result_key = f"arq:result:pipeline-{session_id}"
     await redis.delete(old_result_key)
 
+    # Enfileira job no ARQ worker
     arq_pool = await create_pool(_arq_redis_settings(settings.redis_url))
     try:
         await arq_pool.enqueue_job(
-            "run_single_etapa",
+            "run_pipeline",
             session_id,
-            etapa_id,
-            _job_id=f"etapa-{etapa_id}",
+            result["etapa_ids"],
+            _job_id=f"pipeline-{session_id}",
         )
     finally:
         await arq_pool.aclose()
 
-    return {"status": "queued", "etapa_id": etapa_id}
+    return result
 
 
-@router.get("/{etapa_id}/stream")
-async def stream_etapa(
+@router.get("/status")
+async def get_pipeline_status(
     session_id: int,
-    etapa_id: int,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
     redis: Redis = Depends(get_redis),
 ):
-    """SSE stream do progresso da etapa via Redis PubSub."""
-    channel = ETAPA_CHANNEL.format(etapa_id=etapa_id)
+    """Retorna estado atual do pipeline."""
+    svc = PipelineService(db, settings, redis)
+    status = await svc.get_status(session_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Nenhum pipeline encontrado")
+    return status
+
+
+@router.post("/cancel")
+async def cancel_pipeline(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    redis: Redis = Depends(get_redis),
+):
+    """Cancela pipeline em execução."""
+    svc = PipelineService(db, settings, redis)
+    await svc.cancel_pipeline(session_id)
+    return {"status": "cancelled"}
+
+
+@router.get("/stream")
+async def stream_pipeline(
+    session_id: int,
+    redis: Redis = Depends(get_redis),
+):
+    """SSE stream do progresso do pipeline via Redis PubSub."""
+    channel = PIPELINE_CHANNEL.format(session_id=session_id)
 
     async def event_generator():
         pubsub = redis.pubsub()
@@ -100,12 +115,13 @@ async def stream_etapa(
                     # Verifica se é mensagem terminal
                     try:
                         parsed = json.loads(data)
-                        if parsed.get("type") in ("done", "error"):
+                        if parsed.get("type") in ("done", "error", "cancelled"):
                             yield "data: [DONE]\n\n"
                             return
                     except (json.JSONDecodeError, ValueError):
                         pass
                 else:
+                    # Heartbeat para manter conexão SSE viva
                     yield ": heartbeat\n\n"
                     await asyncio.sleep(0.5)
         finally:
@@ -119,12 +135,13 @@ async def stream_etapa(
     )
 
 
-@router.delete("/{etapa_id}", status_code=204)
-async def delete_etapa(
+@router.get("/summary")
+async def get_pipeline_summary(
     session_id: int,
-    etapa_id: int,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    redis: Redis = Depends(get_redis),
 ):
-    svc = EtapaService(db, settings)
-    await svc.delete(session_id, etapa_id)
+    """Retorna resumo agregado de pendências de todas as etapas."""
+    svc = PipelineService(db, settings, redis)
+    return await svc.build_summary(session_id)

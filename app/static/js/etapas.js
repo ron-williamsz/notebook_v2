@@ -570,7 +570,11 @@ window.Etapas = {
         const stepTexts = {};
 
         try {
-          await API.executeEtapaStream(this.sessionId, etapaId, {
+          // 1. Enfileira no worker (independente do browser)
+          await API.executeEtapa(this.sessionId, etapaId);
+
+          // 2. Conecta ao stream de eventos via Redis PubSub
+          await API.streamEtapaEvents(this.sessionId, etapaId, {
             signal: abortController.signal,
             onProgress: (msg) => {
                 const progress = document.getElementById(`etapa-progress-${etapaId}`);

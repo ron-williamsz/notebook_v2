@@ -2116,3 +2116,244 @@ mark.hist-sem-nf {
     .chat-bubble { max-width: 96%; }
     .navbar-title { font-size: 0.85rem; }
 }
+
+/* ===========================================================
+   Pipeline — Executar Todas
+   =========================================================== */
+.pipeline-progress {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.pipeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.pipeline-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.pipeline-bar {
+    height: 6px;
+    background: var(--bg-input);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.pipeline-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.pipeline-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.pipeline-skills-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.pipeline-skill-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--radius-xs);
+    font-size: 0.82rem;
+}
+
+.pipeline-skill-status {
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.pipeline-skill-status.pending { color: var(--text-muted); }
+.pipeline-skill-status.running { color: var(--accent); }
+.pipeline-skill-status.done { color: var(--success); }
+.pipeline-skill-status.error { color: var(--error); }
+
+.pipeline-skill-name {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+.pipeline-skill-info {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* --- Pipeline Summary --- */
+.pipeline-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.pipeline-summary-skill {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.pipeline-summary-skill.has-pendencias {
+    border-color: var(--error);
+    border-opacity: 0.3;
+}
+
+.pipeline-summary-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.pipeline-summary-header:hover {
+    background: var(--bg-surface-hover);
+}
+
+.pipeline-summary-icon {
+    font-size: 1.1rem;
+}
+
+.pipeline-summary-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.pipeline-summary-lancto {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 2px 6px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-xs);
+}
+
+.pipeline-summary-chevron {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.pipeline-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: var(--radius-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.pipeline-badge.aprovado {
+    background: rgba(129, 201, 149, 0.15);
+    color: var(--success);
+}
+
+.pipeline-badge.divergencia {
+    background: rgba(242, 139, 130, 0.15);
+    color: var(--error);
+}
+
+.pipeline-badge.ausente {
+    background: rgba(253, 214, 99, 0.15);
+    color: var(--warning);
+}
+
+.pipeline-summary-body {
+    padding: 0 12px 12px;
+}
+
+.pipeline-summary-ok {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    padding: 8px 0;
+}
+
+.pipeline-summary-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.pipeline-summary-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+}
+
+.pipeline-summary-line.has-pendencias {
+    border-color: rgba(242, 139, 130, 0.4);
+}
+
+.pipeline-pendencias-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+
+.pipeline-pendencias-table th {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+}
+
+.pipeline-pendencias-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+
+.pipeline-pendencias-table tr.divergencia td:first-child {
+    border-left: 3px solid var(--error);
+}
+
+.pipeline-pendencias-table tr.ausente td:first-child {
+    border-left: 3px solid var(--warning);
+}
+
+.pipeline-pendencias-table small {
+    color: var(--text-muted);
+}
+
+/* Spinner extra small */
+.spinner-xs {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+}

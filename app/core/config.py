@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     auth_username: str = "admin"
     auth_password: str = "admin"
 
+    # Redis
+    redis_url: str = "redis://redis:6379/0"
+
     # App
     app_host: str = "0.0.0.0"
     app_port: int = 8000

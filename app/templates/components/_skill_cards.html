@@ -14,14 +14,24 @@
         <!-- Preenchido por JS -->
     </div>
 
-    <!-- Botão Executar -->
-    <button class="btn btn-primary skills-execute-btn" id="btn-execute-skills"
-            onclick="Skills.executeSelected()" disabled>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-        </svg>
-        Executar selecionadas
-    </button>
+    <!-- Botões de Execução -->
+    <div class="skills-actions" style="display:flex; flex-direction:column; gap:8px; padding:0 12px;">
+        <button class="btn btn-primary skills-execute-btn" id="btn-execute-skills"
+                onclick="Skills.executeSelected()" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Executar selecionadas
+        </button>
+        <button class="btn btn-outlined skills-execute-btn" id="btn-execute-all"
+                onclick="Pipeline.startAll()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+                <line x1="19" y1="3" x2="19" y2="21"/>
+            </svg>
+            Executar todas
+        </button>
+    </div>
 
     <!-- Estado vazio -->
     <div class="skills-empty hidden" id="skills-empty">
