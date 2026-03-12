@@ -9,6 +9,7 @@ from sqlmodel import select
 from app.core.config import BASE_DIR
 from app.core.exceptions import NotFoundError
 from app.models.etapa import Etapa
+from app.models.skill import Skill
 from app.models.session import Session
 from app.models.chat_message import ChatMessage as ChatMessageRecord
 from app.schemas.session import GoSatiSelection, SessionCreate
@@ -51,12 +52,15 @@ class SessionService:
         return session
 
     async def get_coverage(self, session_id: int) -> dict:
-        """Retorna cobertura de análise: total, analisados, pendentes."""
+        """Retorna cobertura de análise com pendências reais por skill."""
         session = await self.get_by_id(session_id)
         total = session.gosati_total_despesas or 0
 
+        from sqlalchemy.orm import selectinload
         result = await self.db.execute(
-            select(Etapa).where(
+            select(Etapa)
+            .options(selectinload(Etapa.skill))
+            .where(
                 Etapa.session_id == session_id,
                 Etapa.status == "done",
             )
@@ -64,15 +68,39 @@ class SessionService:
         etapas = result.scalars().all()
 
         analisados: set[str] = set()
+        total_criterios = 0
+        total_pendentes = 0
+        skills_summary: list[dict] = []
+
         for etapa in etapas:
             if not etapa.result_text:
                 continue
             try:
                 data = json.loads(etapa.result_text)
+                # Conta lançamentos analisados
                 for lanc in data.get("lancamentos", []):
                     num = str(lanc.get("numero_lancamento", ""))
                     if num:
                         analisados.add(num)
+
+                # Conta pendências dos critérios
+                criterios = data.get("criterios", [])
+                if criterios:
+                    skill_pend = 0
+                    skill_total = len(criterios)
+                    for cr in criterios:
+                        res = cr.get("resultado", "")
+                        if res in ("DIVERGENCIA", "ITEM_AUSENTE"):
+                            skill_pend += 1
+                    total_criterios += skill_total
+                    total_pendentes += skill_pend
+                    skill_name = etapa.skill.name if etapa.skill else f"Etapa {etapa.id}"
+                    skills_summary.append({
+                        "skill_name": skill_name,
+                        "total": skill_total,
+                        "pendentes": skill_pend,
+                        "aprovados": skill_total - skill_pend,
+                    })
             except (json.JSONDecodeError, KeyError):
                 pass
 
@@ -80,8 +108,10 @@ class SessionService:
         return {
             "total_despesas": total,
             "analisados": n_analisados,
-            "pendentes": max(0, total - n_analisados),
+            "pendentes": total_pendentes,
+            "total_criterios": total_criterios,
             "percentual": round(n_analisados / total * 100) if total > 0 else 0,
+            "skills": skills_summary,
             "lancamentos_analisados": sorted(analisados),
         }
 
