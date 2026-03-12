@@ -83,4 +83,5 @@ async def list_condominios(
             if q in str(c["codigo"]).lower() or q in c["nome"].lower()
         ]
 
-    return condominios[:50]
+    condominios.sort(key=lambda c: c["codigo"])
+    return condominios[:200]

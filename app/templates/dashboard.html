@@ -9,51 +9,59 @@
     </svg>
     <span class="btn-label-mobile-hide">Configurações</span>
 </a>
-<button class="btn btn-primary btn-sm" onclick="Dashboard.showCreateModal()">
-    + Criar novo
-</button>
 {% endblock %}
 
 {% block content %}
 <div class="dashboard">
     <div class="dashboard-tabs">
-        <button class="dashboard-tab active">Todos</button>
-        <button class="dashboard-tab">Meus notebooks</button>
+        <button class="dashboard-tab active" data-tab="todos">Todos</button>
+        <button class="dashboard-tab" data-tab="meus">Meus notebooks</button>
     </div>
 
-    <div class="dashboard-header">
-        <h1 id="section-title">Meus notebooks</h1>
-    </div>
-
-    <div class="notebook-grid" id="notebook-grid">
-        <!-- Cards preenchidos por JS -->
-    </div>
-
-    <div class="empty-state hidden" id="empty-state">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4; margin-bottom:12px">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+    <!-- Search bar -->
+    <div class="dashboard-search" id="dashboard-search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:0.4">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
         </svg>
-        <p>Nenhum notebook ainda.</p>
-        <p style="font-size:0.8rem; margin-top:4px">Clique em "Criar novo" para começar.</p>
+        <input type="text" class="dashboard-search-input" id="search-input"
+               placeholder="Buscar condomínio por código ou nome..." autocomplete="off">
+    </div>
+
+    <!-- Tab: Todos os condomínios -->
+    <div class="tab-content" id="tab-todos">
+        <div class="cond-list" id="cond-list">
+            <!-- Preenchido por JS -->
+        </div>
+        <div class="empty-state hidden" id="empty-cond">
+            <p>Nenhum condomínio encontrado.</p>
+        </div>
+        <div class="loading-state" id="loading-cond">
+            <p style="color:var(--text-muted)">Carregando condomínios...</p>
+        </div>
+    </div>
+
+    <!-- Tab: Meus notebooks -->
+    <div class="tab-content hidden" id="tab-meus">
+        <div class="cond-list" id="notebook-list">
+            <!-- Preenchido por JS -->
+        </div>
+        <div class="empty-state hidden" id="empty-notebooks">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4; margin-bottom:12px">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+            <p>Nenhum notebook ainda.</p>
+            <p style="font-size:0.8rem; margin-top:4px">Selecione um condomínio na aba "Todos" para começar.</p>
+        </div>
     </div>
 </div>
 
-<!-- Modal Criar Notebook -->
+<!-- Modal Selecionar Mês/Ano -->
 <dialog class="modal" id="create-modal">
-    <h2>Criar notebook</h2>
-    <div class="form-group">
-        <label for="notebook-title">Nome do notebook</label>
-        <input type="text" class="input" id="notebook-title" placeholder="Ex: Análise Condomínio Fev/2026" autofocus>
-    </div>
-    <div class="form-group" style="position:relative;">
-        <label for="create-cond-search">Condomínio</label>
-        <input type="text" class="input" id="create-cond-search"
-               placeholder="Digite código ou nome..." autocomplete="off">
-        <input type="hidden" id="create-cond-codigo">
-        <input type="hidden" id="create-cond-nome">
-        <div class="autocomplete-list hidden" id="create-cond-list"></div>
-    </div>
+    <h2 id="modal-title">Abrir notebook</h2>
+    <p id="modal-cond-name" style="color:var(--text-secondary); margin-bottom:16px;"></p>
+    <input type="hidden" id="create-cond-codigo">
+    <input type="hidden" id="create-cond-nome">
     <div class="form-group" style="display:flex; gap:12px;">
         <div style="flex:1;">
             <label for="create-mes">Mês</label>
@@ -80,11 +88,11 @@
     </div>
     <div class="modal-actions">
         <button class="btn btn-outlined btn-sm" onclick="document.getElementById('create-modal').close()">Cancelar</button>
-        <button class="btn btn-primary btn-sm" onclick="Dashboard.createNotebook()">Criar</button>
+        <button class="btn btn-primary btn-sm" onclick="Dashboard.openNotebook()">Abrir</button>
     </div>
 </dialog>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', path='js/dashboard.js') }}"></script>
+<script src="{{ url_for('static', path='js/dashboard.js') }}?v=2"></script>
 {% endblock %}

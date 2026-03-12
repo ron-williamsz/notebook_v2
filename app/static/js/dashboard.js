@@ -1,144 +1,203 @@
 /**
- * Dashboard — listagem e criação de notebooks
+ * Dashboard — lista de condomínios e notebooks
  */
 window.Dashboard = {
-    _searchTimer: null,
+    _allConds: [],
+    _allSessions: [],
+    _activeTab: 'todos',
 
     async init() {
-        await this.loadNotebooks();
-        this._initCondSearch();
+        this._initTabs();
+        this._initSearch();
+        await Promise.all([this._loadCondominios(), this._loadSessions()]);
     },
 
-    _initCondSearch() {
-        const input = document.getElementById('create-cond-search');
-        const list = document.getElementById('create-cond-list');
+    /* ── Tabs ── */
+    _initTabs() {
+        document.querySelectorAll('.dashboard-tab').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.dashboard-tab').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this._activeTab = btn.dataset.tab;
+                document.getElementById('tab-todos').classList.toggle('hidden', this._activeTab !== 'todos');
+                document.getElementById('tab-meus').classList.toggle('hidden', this._activeTab !== 'meus');
+                document.getElementById('dashboard-search').classList.toggle('hidden', this._activeTab !== 'todos');
+                if (this._activeTab === 'meus') this._renderNotebooks();
+            });
+        });
+    },
+
+    /* ── Search ── */
+    _initSearch() {
+        const input = document.getElementById('search-input');
         if (!input) return;
-
-        input.addEventListener('input', () => this._searchCond(input.value));
-        input.addEventListener('focus', () => {
-            if (input.value.length >= 2) this._searchCond(input.value);
-        });
-
-        document.addEventListener('click', (e) => {
-            if (list && !list.contains(e.target) && e.target !== input) {
-                list.classList.add('hidden');
-            }
-        });
+        input.addEventListener('input', () => this._filterConds(input.value));
     },
 
-    _searchCond(value) {
-        clearTimeout(this._searchTimer);
-        const list = document.getElementById('create-cond-list');
-        if (!list) return;
+    _filterConds(query) {
+        const q = (query || '').toLowerCase().trim();
+        const filtered = q
+            ? this._allConds.filter(c =>
+                String(c.codigo).includes(q) || c.nome.toLowerCase().includes(q))
+            : this._allConds;
+        this._renderCondList(filtered);
+    },
 
-        if (!value || value.length < 2) {
-            list.classList.add('hidden');
+    /* ── Load condomínios ── */
+    async _loadCondominios() {
+        const loading = document.getElementById('loading-cond');
+        try {
+            // Fetch all (no busca param = full list)
+            this._allConds = await API.searchCondominios('');
+            loading.classList.add('hidden');
+            this._renderCondList(this._allConds);
+        } catch (e) {
+            loading.innerHTML = `<p style="color:var(--text-error)">Erro ao carregar condomínios: ${e.message}</p>`;
+        }
+    },
+
+    /* ── Load sessions ── */
+    async _loadSessions() {
+        try {
+            this._allSessions = await API.listSessions();
+        } catch (e) {
+            console.error('Erro ao carregar sessions:', e);
+        }
+    },
+
+    /* ── Render condomínios list ── */
+    _renderCondList(conds) {
+        const list = document.getElementById('cond-list');
+        const empty = document.getElementById('empty-cond');
+
+        if (!conds.length) {
+            list.innerHTML = '';
+            empty.classList.remove('hidden');
             return;
         }
+        empty.classList.add('hidden');
 
-        this._searchTimer = setTimeout(async () => {
-            try {
-                const results = await API.searchCondominios(value);
-                if (!results.length) {
-                    list.innerHTML = '<div class="autocomplete-empty">Nenhum condomínio encontrado</div>';
-                } else {
-                    list.innerHTML = results.map(c => `
-                        <div class="autocomplete-item" data-codigo="${c.codigo}" data-nome="${Utils.escapeHtml(c.nome)}">
-                            <span class="ac-code">${c.codigo}</span>
-                            <span class="ac-name">${Utils.escapeHtml(c.nome)}</span>
-                        </div>
-                    `).join('');
-
-                    list.querySelectorAll('.autocomplete-item').forEach(item => {
-                        item.addEventListener('click', () => {
-                            this._selectCond(parseInt(item.dataset.codigo), item.dataset.nome);
-                        });
-                    });
-                }
-                list.classList.remove('hidden');
-            } catch (e) {
-                list.classList.add('hidden');
+        // Build a map of cond_codigo -> sessions for badges
+        const sessMap = {};
+        for (const s of this._allSessions) {
+            if (s.gosati_condominio_codigo) {
+                if (!sessMap[s.gosati_condominio_codigo]) sessMap[s.gosati_condominio_codigo] = [];
+                sessMap[s.gosati_condominio_codigo].push(s);
             }
-        }, 250);
+        }
+
+        list.innerHTML = conds.map(c => {
+            const sessions = sessMap[c.codigo] || [];
+            const hasSessions = sessions.length > 0;
+            const badge = hasSessions
+                ? `<span class="cond-badge active">${sessions.length} notebook${sessions.length > 1 ? 's' : ''}</span>`
+                : '';
+            return `<div class="cond-row" data-codigo="${c.codigo}" data-nome="${Utils.escapeHtml(c.nome)}">
+                <span class="cond-codigo">${c.codigo}</span>
+                <span class="cond-nome">${Utils.escapeHtml(c.nome)}</span>
+                ${badge}
+                <svg class="cond-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </div>`;
+        }).join('');
+
+        list.querySelectorAll('.cond-row').forEach(row => {
+            row.addEventListener('click', () => {
+                this._onCondClick(parseInt(row.dataset.codigo), row.dataset.nome);
+            });
+        });
     },
 
-    _selectCond(codigo, nome) {
-        document.getElementById('create-cond-search').value = `${codigo} — ${nome}`;
+    /* ── Render notebooks (Meus notebooks tab) ── */
+    _renderNotebooks() {
+        const list = document.getElementById('notebook-list');
+        const empty = document.getElementById('empty-notebooks');
+
+        if (!this._allSessions.length) {
+            list.innerHTML = '';
+            empty.classList.remove('hidden');
+            return;
+        }
+        empty.classList.add('hidden');
+
+        const meses = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+        list.innerHTML = this._allSessions.map(s => {
+            const periodo = s.gosati_mes && s.gosati_ano
+                ? `${meses[s.gosati_mes]}/${s.gosati_ano}`
+                : '';
+            const condCode = s.gosati_condominio_codigo || '';
+            return `<div class="cond-row notebook-row" onclick="location.href='/notebooks/${s.id}'">
+                <span class="cond-codigo">${condCode}</span>
+                <span class="cond-nome">${Utils.escapeHtml(s.title)}</span>
+                <span class="notebook-periodo">${periodo}</span>
+                <span class="notebook-fontes">${s.source_count} fontes</span>
+                <span class="notebook-data">${Utils.formatDate(s.created_at)}</span>
+                <button class="btn-icon btn-ghost btn-sm" onclick="event.stopPropagation(); Dashboard.deleteNotebook(${s.id})" title="Excluir">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-.867 12.142A2 2 0 0 1 16.138 20H7.862a2 2 0 0 1-1.995-1.858L5 6"/>
+                    </svg>
+                </button>
+                <svg class="cond-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </div>`;
+        }).join('');
+    },
+
+    /* ── Click on condomínio ── */
+    _onCondClick(codigo, nome) {
+        // Check if there are existing sessions for this cond
+        const existing = this._allSessions.filter(s => s.gosati_condominio_codigo === codigo);
+        if (existing.length === 1) {
+            // Redirect to the only existing notebook
+            location.href = `/notebooks/${existing[0].id}`;
+            return;
+        }
+        // Show modal to pick month/year (and create new notebook)
         document.getElementById('create-cond-codigo').value = codigo;
         document.getElementById('create-cond-nome').value = nome;
-        document.getElementById('create-cond-list').classList.add('hidden');
+        document.getElementById('modal-cond-name').textContent = `${codigo} — ${nome}`;
+
+        // Pre-fill current month - 1
+        const now = new Date();
+        const prevMonth = now.getMonth(); // 0-indexed = previous month
+        document.getElementById('create-mes').value = prevMonth || 12;
+        document.getElementById('create-ano').value = prevMonth === 0 ? now.getFullYear() - 1 : now.getFullYear();
+
+        document.getElementById('create-modal').showModal();
     },
 
-    async loadNotebooks() {
-        try {
-            const sessions = await API.listSessions();
-            const grid = document.getElementById('notebook-grid');
-            const empty = document.getElementById('empty-state');
-
-            if (!sessions.length) {
-                grid.innerHTML = '';
-                empty.classList.remove('hidden');
-                return;
-            }
-
-            empty.classList.add('hidden');
-            grid.innerHTML = sessions.map(s => `
-                <div class="notebook-card" onclick="location.href='/notebooks/${s.id}'">
-                    <div class="notebook-card-emoji">${Utils.randomEmoji()}</div>
-                    <div class="notebook-card-title">${Utils.escapeHtml(s.title)}</div>
-                    <div class="notebook-card-meta">
-                        <span>${Utils.formatDate(s.created_at)} &middot; ${s.source_count} fontes</span>
-                        <button class="btn-icon btn-ghost btn-sm" onclick="event.stopPropagation(); Dashboard.deleteNotebook(${s.id})" title="Excluir">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-        } catch (e) {
-            Utils.toast('Erro ao carregar notebooks: ' + e.message, 'error');
-        }
-    },
-
-    showCreateModal() {
-        const modal = document.getElementById('create-modal');
-        document.getElementById('notebook-title').value = '';
-        document.getElementById('create-cond-search').value = '';
-        document.getElementById('create-cond-codigo').value = '';
-        document.getElementById('create-cond-nome').value = '';
-        document.getElementById('create-mes').value = '';
-        document.getElementById('create-ano').value = '';
-        modal.showModal();
-        document.getElementById('notebook-title').focus();
-    },
-
-    async createNotebook() {
-        const titleInput = document.getElementById('notebook-title');
-        const title = titleInput.value.trim();
-        if (!title) {
-            Utils.toast('Digite um nome para o notebook', 'warning');
-            return;
-        }
-
-        const condCodigo = parseInt(document.getElementById('create-cond-codigo').value) || null;
-        const condNome = document.getElementById('create-cond-nome').value || null;
+    /* ── Open/Create notebook ── */
+    async openNotebook() {
+        const codigo = parseInt(document.getElementById('create-cond-codigo').value);
+        const nome = document.getElementById('create-cond-nome').value;
         const mes = parseInt(document.getElementById('create-mes').value) || null;
         const ano = parseInt(document.getElementById('create-ano').value) || null;
 
-        if (!condCodigo) {
-            Utils.toast('Selecione um condomínio', 'warning');
-            return;
-        }
         if (!mes || !ano) {
             Utils.toast('Selecione o mês e o ano', 'warning');
             return;
         }
 
+        // Check if session already exists for this cond+month+year
+        const existing = this._allSessions.find(s =>
+            s.gosati_condominio_codigo === codigo &&
+            s.gosati_mes === mes &&
+            s.gosati_ano === ano
+        );
+        if (existing) {
+            document.getElementById('create-modal').close();
+            location.href = `/notebooks/${existing.id}`;
+            return;
+        }
+
+        // Create new
+        const meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        const title = `${nome} — ${meses[mes]}/${ano}`;
+
         try {
             const session = await API.createSession(title, {
-                gosati_condominio_codigo: condCodigo,
-                gosati_condominio_nome: condNome,
+                gosati_condominio_codigo: codigo,
+                gosati_condominio_nome: nome,
                 gosati_mes: mes,
                 gosati_ano: ano,
             });
@@ -154,7 +213,9 @@ window.Dashboard = {
         try {
             await API.deleteSession(id);
             Utils.toast('Notebook excluído', 'success');
-            await this.loadNotebooks();
+            this._allSessions = this._allSessions.filter(s => s.id !== id);
+            if (this._activeTab === 'meus') this._renderNotebooks();
+            else this._renderCondList(this._allConds);
         } catch (e) {
             Utils.toast('Erro ao excluir: ' + e.message, 'error');
         }
@@ -166,9 +227,6 @@ document.addEventListener('DOMContentLoaded', () => Dashboard.init());
 // Enter no modal
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && document.getElementById('create-modal').open) {
-        const active = document.activeElement;
-        // Don't submit if focus is on the condominium search (let autocomplete work)
-        if (active && active.id === 'create-cond-search') return;
-        Dashboard.createNotebook();
+        Dashboard.openNotebook();
     }
 });
