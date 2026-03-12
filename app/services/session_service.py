@@ -84,14 +84,11 @@ class SessionService:
                         analisados.add(num)
 
                 # Conta pendências dos critérios
-                criterios = data.get("criterios", [])
-                if criterios:
-                    skill_pend = 0
-                    skill_total = len(criterios)
-                    for cr in criterios:
-                        res = cr.get("resultado", "")
-                        if res in ("DIVERGENCIA", "ITEM_AUSENTE"):
-                            skill_pend += 1
+                criterios = data.get("criterios")
+                if criterios and isinstance(criterios, dict):
+                    resumo = criterios.get("resumo", {})
+                    skill_total = resumo.get("total_verificacoes", 0)
+                    skill_pend = resumo.get("divergencias", 0) + resumo.get("itens_ausentes", 0)
                     total_criterios += skill_total
                     total_pendentes += skill_pend
                     skill_name = etapa.skill.name if etapa.skill else f"Etapa {etapa.id}"
@@ -99,7 +96,7 @@ class SessionService:
                         "skill_name": skill_name,
                         "total": skill_total,
                         "pendentes": skill_pend,
-                        "aprovados": skill_total - skill_pend,
+                        "aprovados": resumo.get("aprovados", 0),
                     })
             except (json.JSONDecodeError, KeyError):
                 pass
