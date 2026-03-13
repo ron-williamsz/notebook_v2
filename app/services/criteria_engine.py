@@ -1,7 +1,7 @@
 """Motor de execução de critérios estruturados.
 
 Processa critérios em fases:
-  A) Rule-based: presenca_documento, classificacao_documento, consistencia_historico
+  A) Rule-based: presenca_documento, classificacao_documento, consistencia_historico, duplicidade_valor
   B) IA 1:1: conferencia_conteudo (Gemini, 1 doc vs 1 lançamento)
   C) IA N:1: conferencia_soma (Gemini, soma de N lançamentos vs 1 guia/DARF)
 """
@@ -24,6 +24,7 @@ from app.schemas.criterio import (
     CriteriaExecutionResult,
     CriterionGroupResult,
     CriterionResult,
+    DuplicidadeValorConfig,
     PresencaDocumentoConfig,
 )
 
@@ -104,6 +105,10 @@ class CriteriaEngine:
             elif criterion.tipo == "conferencia_soma":
                 results = await self._eval_conferencia_soma(
                     config, criterion.nome, lancamentos, docs_by_lancamento
+                )
+            elif criterion.tipo == "duplicidade_valor":
+                results = self._eval_duplicidade_valor(
+                    config, criterion.nome, lancamentos
                 )
             else:
                 continue
@@ -786,6 +791,101 @@ class CriteriaEngine:
             valor_str, soma_ref, ai_result["confere"],
         )
         return ai_result
+
+    # ── Rule-based: duplicidade_valor ──────────────────────────────────
+
+    def _eval_duplicidade_valor(
+        self,
+        config: DuplicidadeValorConfig,
+        criterio_nome: str,
+        lancamentos: list[dict],
+    ) -> list[CriterionResult]:
+        """Detecta lançamentos com valores iguais (possível duplicidade).
+
+        Agrupa lançamentos por valor (+ campos_extras opcionais).
+        Grupos com 2+ lançamentos → DIVERGENCIA.
+        Lançamentos únicos → APROVADO.
+        """
+        results = []
+        tolerancia = config.tolerancia
+
+        # Monta chave de agrupamento para cada lançamento
+        def _group_key(lanc: dict) -> str:
+            valor = float(lanc.get("valor", 0))
+            # Arredonda para a tolerância
+            valor_rounded = round(valor, 2)
+            parts = [str(valor_rounded)]
+            for campo in config.campos_extras:
+                parts.append(str(lanc.get(campo, "")).strip().upper())
+            return "|".join(parts)
+
+        # Agrupa
+        from collections import defaultdict
+        groups: dict[str, list[dict]] = defaultdict(list)
+        for lanc in lancamentos:
+            key = _group_key(lanc)
+            groups[key].append(lanc)
+
+        # Para agrupamento com tolerância numérica, faz merge de chaves próximas
+        if tolerancia > 0.01:
+            merged_groups: dict[str, list[dict]] = defaultdict(list)
+            processed = set()
+            keys = list(groups.keys())
+            for i, k1 in enumerate(keys):
+                if k1 in processed:
+                    continue
+                merged_key = k1
+                merged_groups[merged_key].extend(groups[k1])
+                processed.add(k1)
+                v1 = float(k1.split("|")[0])
+                for j in range(i + 1, len(keys)):
+                    k2 = keys[j]
+                    if k2 in processed:
+                        continue
+                    v2 = float(k2.split("|")[0])
+                    # Mesmos campos extras?
+                    extras1 = k1.split("|")[1:]
+                    extras2 = k2.split("|")[1:]
+                    if extras1 == extras2 and abs(v1 - v2) <= tolerancia:
+                        merged_groups[merged_key].extend(groups[k2])
+                        processed.add(k2)
+            groups = merged_groups
+
+        # Gera resultados
+        for key, lanc_group in groups.items():
+            valor_str = key.split("|")[0]
+            if len(lanc_group) >= 2:
+                # Duplicidade detectada
+                nums = [str(l["numero_lancamento"]) for l in lanc_group]
+                for lanc in lanc_group:
+                    num = str(lanc["numero_lancamento"])
+                    outros = [n for n in nums if n != num]
+                    results.append(CriterionResult(
+                        lancamento=num,
+                        criterio_nome=criterio_nome,
+                        criterio_tipo="duplicidade_valor",
+                        resultado="DIVERGENCIA",
+                        detalhes=(
+                            f"Valor R$ {float(valor_str):,.2f} duplicado com "
+                            f"lanç. {', '.join(outros)}"
+                        ),
+                        valores={
+                            "valor": valor_str,
+                            "lancamentos_duplicados": outros,
+                        },
+                    ))
+            else:
+                lanc = lanc_group[0]
+                num = str(lanc["numero_lancamento"])
+                results.append(CriterionResult(
+                    lancamento=num,
+                    criterio_nome=criterio_nome,
+                    criterio_tipo="duplicidade_valor",
+                    resultado="APROVADO",
+                    detalhes=f"Valor R$ {float(valor_str):,.2f} — sem duplicidade",
+                ))
+
+        return results
 
     # ── Helpers ───────────────────────────────────────────────────────
 

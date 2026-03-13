@@ -63,6 +63,15 @@ class ConferenciaSomaConfig(BaseModel):
     tolerancia: float = 0.01
 
 
+class DuplicidadeValorConfig(BaseModel):
+    """Detecta lançamentos com valores iguais (possível duplicidade de pagamento).
+
+    Agrupa lançamentos por valor e marca pares/grupos com mesmo valor como DIVERGENCIA.
+    """
+    tolerancia: float = 0.01               # Tolerância para considerar valores iguais
+    campos_extras: list[str] = []          # Campos adicionais para comparar: ["data", "nome_sub_conta"]
+
+
 # Mapa tipo → config class
 CRITERION_CONFIG_MAP: dict[str, type[BaseModel]] = {
     "presenca_documento": PresencaDocumentoConfig,
@@ -70,6 +79,7 @@ CRITERION_CONFIG_MAP: dict[str, type[BaseModel]] = {
     "conferencia_conteudo": ConferenciaConteudoConfig,
     "consistencia_historico": ConsistenciaHistoricoConfig,
     "conferencia_soma": ConferenciaSomaConfig,
+    "duplicidade_valor": DuplicidadeValorConfig,
 }
 
 
