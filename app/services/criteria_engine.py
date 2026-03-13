@@ -232,7 +232,34 @@ class CriteriaEngine:
                             found_detail = f"{config.documento_nome} encontrado ({tipo_part.strip().title()})"
                             break
 
-                # --- Camada 3: fallback por existência de doc do mime correto ---
+                # --- Camada 3: busca global em docs de outros lançamentos ---
+                # Documentos como SEFIP/GFD cobrem múltiplos lançamentos
+                # mas estão anexados a apenas um
+                if not found:
+                    for other_num, other_docs in docs_by_lanc.items():
+                        if other_num == num:
+                            continue
+                        for doc in other_docs:
+                            if config.mime_types:
+                                doc_mime = doc.get("mime_type", "")
+                                if not any(mt in doc_mime for mt in config.mime_types):
+                                    continue
+                            parts = []
+                            if doc.get("label"):
+                                parts.append(doc["label"])
+                            if doc.get("filename"):
+                                parts.append(doc["filename"])
+                            if doc.get("texto_extraido"):
+                                parts.append(doc["texto_extraido"])
+                            texto = " ".join(parts).lower()
+                            if any(kw in texto for kw in kw_lower):
+                                found = True
+                                found_detail = f"{config.documento_nome} encontrado (via lanç. {other_num})"
+                                break
+                        if found:
+                            break
+
+                # --- Camada 4: fallback por existência de doc do mime correto ---
                 if not found and mime_candidates and config.mime_types:
                     found = True
                     found_detail = f"{config.documento_nome} encontrado (documento presente)"
