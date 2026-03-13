@@ -378,8 +378,8 @@ class CriteriaEngine:
                 "criterio_nome": criterio_nome,
             })
 
-            # Processa em batches de 10 (paralelo)
-            if len(batch) >= 10:
+            # Processa em batches de 5 (paralelo, evita rate limit)
+            if len(batch) >= 5:
                 batch_results = await self._process_ai_batch(batch)
                 results.extend(batch_results)
                 batch = []
@@ -392,21 +392,33 @@ class CriteriaEngine:
         return results
 
     async def _process_ai_batch(self, batch: list[dict]) -> list[CriterionResult]:
-        """Processa um batch de conferências via Gemini em paralelo."""
+        """Processa um batch de conferências via Gemini em paralelo com retry."""
         import asyncio
 
         async def _safe_check(item):
-            try:
-                return await self._ai_check_single(item)
-            except Exception as e:
-                logger.error("Erro IA conferência lanç. %s: %s", item["lancamento"], e)
-                return CriterionResult(
-                    lancamento=item["lancamento"],
-                    criterio_nome=item["criterio_nome"],
-                    criterio_tipo="conferencia_conteudo",
-                    resultado="DIVERGENCIA",
-                    detalhes=f"Erro na conferência: {e}",
-                )
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    return await self._ai_check_single(item)
+                except Exception as e:
+                    err_str = str(e)
+                    is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
+                    if is_rate_limit and attempt < max_retries - 1:
+                        wait = (attempt + 1) * 5  # 5s, 10s
+                        logger.warning(
+                            "Rate limit lanç. %s (tentativa %d/%d), aguardando %ds...",
+                            item["lancamento"], attempt + 1, max_retries, wait,
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+                    logger.error("Erro IA conferência lanç. %s: %s", item["lancamento"], e)
+                    return CriterionResult(
+                        lancamento=item["lancamento"],
+                        criterio_nome=item["criterio_nome"],
+                        criterio_tipo="conferencia_conteudo",
+                        resultado="DIVERGENCIA",
+                        detalhes=f"Erro na conferência: {e}",
+                    )
 
         results = await asyncio.gather(*[_safe_check(item) for item in batch])
         return list(results)
