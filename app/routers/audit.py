@@ -1,5 +1,6 @@
 """Rotas de auditoria e gestão de usuários (admin only)."""
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -11,6 +12,17 @@ from app.models.auth_session import AuthSession
 from app.models.base import get_db
 from app.models.user_role import UserRole
 from app.services.audit_service import AuditService
+
+_BRT = ZoneInfo("America/Sao_Paulo")
+
+
+def _to_brt(dt: datetime | None) -> str | None:
+    """Converte datetime (UTC ou naive) para horário de Brasília ISO string."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_BRT).isoformat()
 
 router = APIRouter(prefix="/audit", tags=["Audit"])
 
@@ -44,7 +56,7 @@ async def list_audit_logs(
                 "resource_id": r.resource_id,
                 "details": r.details,
                 "ip_address": r.ip_address,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "created_at": _to_brt(r.created_at),
             }
             for r in rows
         ],
@@ -94,8 +106,8 @@ async def get_active_sessions(
             "user_name": s.user_name,
             "user_email": s.user_email,
             "role": roles_map.get(s.user_email.lower(), getattr(s, "role", "user")),
-            "created_at": s.created_at.isoformat() if s.created_at else None,
-            "expires_at": s.expires_at.isoformat() if s.expires_at else None,
+            "created_at": _to_brt(s.created_at),
+            "expires_at": _to_brt(s.expires_at),
             "condominio": s.selected_cond_nome or "-",
         }
         for s in sessions
@@ -115,7 +127,7 @@ async def list_roles(
         {
             "user_email": r.user_email,
             "role": r.role,
-            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            "updated_at": _to_brt(r.updated_at),
         }
         for r in result.scalars().all()
     ]

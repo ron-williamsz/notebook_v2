@@ -2,6 +2,7 @@
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -102,7 +103,7 @@ class AuditService:
                 "user_email": r[0],
                 "user_name": r[1],
                 "total_actions": r[2],
-                "last_action": r[3].isoformat() if r[3] else None,
+                "last_action": r[3].replace(tzinfo=timezone.utc).astimezone(ZoneInfo("America/Sao_Paulo")).isoformat() if r[3] else None,
             }
             for r in result.all()
         ]
