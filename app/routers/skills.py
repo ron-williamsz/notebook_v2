@@ -92,24 +92,38 @@ async def delete_skill(
 # --- Steps ---
 
 @router.post("/{skill_id}/steps", response_model=StepResponse, status_code=201)
-async def add_step(skill_id: int, data: StepCreate, svc: SkillService = Depends(_svc)):
+async def add_step(
+    skill_id: int, data: StepCreate,
+    svc: SkillService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
+):
     return await svc.add_step(skill_id, data)
 
 
 @router.put("/{skill_id}/steps/{step_id}", response_model=StepResponse)
 async def update_step(
-    skill_id: int, step_id: int, data: StepUpdate, svc: SkillService = Depends(_svc)
+    skill_id: int, step_id: int, data: StepUpdate,
+    svc: SkillService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
 ):
     return await svc.update_step(skill_id, step_id, data)
 
 
 @router.delete("/{skill_id}/steps/{step_id}", status_code=204)
-async def delete_step(skill_id: int, step_id: int, svc: SkillService = Depends(_svc)):
+async def delete_step(
+    skill_id: int, step_id: int,
+    svc: SkillService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
+):
     await svc.delete_step(skill_id, step_id)
 
 
 @router.put("/{skill_id}/steps", response_model=list[StepResponse])
-async def sync_steps(skill_id: int, data: StepSyncRequest, svc: SkillService = Depends(_svc)):
+async def sync_steps(
+    skill_id: int, data: StepSyncRequest,
+    svc: SkillService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
+):
     """Substitui todas as etapas atomicamente (delete + recreate em 1 transação)."""
     return await svc.sync_steps(skill_id, data.steps)
 
@@ -117,7 +131,11 @@ async def sync_steps(skill_id: int, data: StepSyncRequest, svc: SkillService = D
 # --- Criteria ---
 
 @router.put("/{skill_id}/criteria", response_model=list[CriterionResponse])
-async def sync_criteria(skill_id: int, data: CriteriaSyncRequest, svc: SkillService = Depends(_svc)):
+async def sync_criteria(
+    skill_id: int, data: CriteriaSyncRequest,
+    svc: SkillService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
+):
     """Substitui todos os critérios atomicamente (delete + recreate)."""
     return await svc.sync_criteria(skill_id, data.criteria)
 
@@ -130,13 +148,16 @@ async def upload_example(
     file: UploadFile = File(...),
     description: str = Form(""),
     svc: SkillService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
 ):
     return await svc.add_example(skill_id, file, description)
 
 
 @router.delete("/{skill_id}/examples/{example_id}", status_code=204)
 async def delete_example(
-    skill_id: int, example_id: int, svc: SkillService = Depends(_svc)
+    skill_id: int, example_id: int,
+    svc: SkillService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
 ):
     await svc.delete_example(skill_id, example_id)
 
@@ -144,7 +165,11 @@ async def delete_example(
 # --- Export / Import ---
 
 @router.get("/{skill_id}/export")
-async def export_skill(skill_id: int, svc: SkillService = Depends(_svc)):
+async def export_skill(
+    skill_id: int,
+    svc: SkillService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
+):
     """Exporta skill como arquivo ZIP (skill.json + examples/)."""
     zip_buffer, filename = await svc.export_skill(skill_id)
     return StreamingResponse(

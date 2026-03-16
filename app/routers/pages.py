@@ -90,3 +90,12 @@ async def audit_page(request: Request, auth: AuthSession | None = Depends(get_au
     if getattr(auth, "role", "user") != "admin":
         return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse("admin/audit.html", _ctx(request, auth))
+
+
+@router.get("/admin/users", response_class=HTMLResponse)
+async def users_admin_page(request: Request, auth: AuthSession | None = Depends(get_auth_session)):
+    if not auth:
+        return RedirectResponse("/login", status_code=302)
+    if getattr(auth, "role", "user") != "admin":
+        return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse("admin/users.html", _ctx(request, auth))

@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}?v=7">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}?v=8">
     {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -29,7 +29,7 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6m-7-3.5 5.2-3m1.6-3L17 1m-12.5 3 5.2 3m1.6 3L17 19"/>
                 </svg>
-                <span class="btn-label-mobile-hide">Configurar Skills</span>
+                <span class="btn-label-mobile-hide">Skills</span>
             </a>
             <a href="/admin/audit" class="btn btn-outlined btn-sm">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -39,6 +39,15 @@
                     <line x1="16" y1="17" x2="8" y2="17"/>
                 </svg>
                 <span class="btn-label-mobile-hide">Auditoria</span>
+            </a>
+            <a href="/admin/users" class="btn btn-outlined btn-sm">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span class="btn-label-mobile-hide">Usuarios</span>
             </a>
             {% endif %}
             {% endblock %}

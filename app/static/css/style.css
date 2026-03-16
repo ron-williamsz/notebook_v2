@@ -2510,3 +2510,82 @@ mark.hist-sem-nf {
     height: 14px;
     border-width: 2px;
 }
+
+/* ===========================================================
+   Admin — Tabela e badges
+   =========================================================== */
+.admin-section {
+    margin-top: 24px;
+}
+.admin-section h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+.admin-subtitle {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+.admin-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+}
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+.admin-table th {
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+}
+.admin-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+}
+.admin-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.admin-table tbody tr:hover {
+    background: var(--bg-surface-hover);
+}
+.role-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.role-admin {
+    background: rgba(129, 201, 149, 0.15);
+    color: var(--success);
+}
+.role-user {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+}
+.admin-add-role {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.btn-danger-sm {
+    color: var(--error);
+}
+.btn-success-sm {
+    color: var(--success);
+}

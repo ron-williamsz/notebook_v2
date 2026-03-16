@@ -5,20 +5,32 @@ window.AuditPage = {
     _offset: 0,
     _limit: 50,
     _total: 0,
+    _loading: false,
+    _requestId: 0,
 
     async init() {
         this._bindFilters();
-        await Promise.all([this._loadCounters(), this._loadUsers(), this._loadLogs()]);
+        await this._refresh();
     },
 
     _bindFilters() {
         ['filter-user', 'filter-action', 'filter-period'].forEach(id => {
             document.getElementById(id).addEventListener('change', () => {
                 this._offset = 0;
-                this._loadCounters();
-                this._loadLogs();
+                this._refresh();
             });
         });
+    },
+
+    async _refresh() {
+        if (this._loading) return;
+        this._loading = true;
+        const rid = ++this._requestId;
+        try {
+            await Promise.all([this._loadCounters(rid), this._loadUsers(rid), this._loadLogs(false, rid)]);
+        } finally {
+            this._loading = false;
+        }
     },
 
     _getParams() {
@@ -31,10 +43,11 @@ window.AuditPage = {
         return params;
     },
 
-    async _loadCounters() {
+    async _loadCounters(rid) {
         try {
             const period = document.getElementById('filter-period').value;
-            const data = await API.request('GET', `/audit/counters?period=${period}`);
+            const data = await API.getAuditCounters(period);
+            if (rid !== this._requestId) return;
             const total = Object.values(data).reduce((a, b) => a + b, 0);
             document.getElementById('cnt-total').textContent = total;
             document.getElementById('cnt-logins').textContent = data.login || 0;
@@ -44,15 +57,16 @@ window.AuditPage = {
             document.getElementById('cnt-pipelines').textContent = data.execute_pipeline || 0;
         } catch (e) {
             console.error('Erro ao carregar contadores:', e);
+            Utils.toast('Erro ao carregar contadores de auditoria', 'error');
         }
     },
 
-    async _loadUsers() {
+    async _loadUsers(rid) {
         try {
             const period = document.getElementById('filter-period').value;
-            const users = await API.request('GET', `/audit/users?period=${period}`);
+            const users = await API.getAuditUsers(period);
+            if (rid !== this._requestId) return;
             const select = document.getElementById('filter-user');
-            // Keep first option
             select.innerHTML = '<option value="">Todos os usuários</option>';
             for (const u of users) {
                 const opt = document.createElement('option');
@@ -77,14 +91,15 @@ window.AuditPage = {
             }
         } catch (e) {
             console.error('Erro ao carregar usuários:', e);
+            Utils.toast('Erro ao carregar usuários ativos', 'error');
         }
     },
 
-    async _loadLogs(append = false) {
+    async _loadLogs(append = false, rid) {
         try {
             const params = this._getParams();
-            const qs = new URLSearchParams(params).toString();
-            const data = await API.request('GET', `/audit?${qs}`);
+            const data = await API.getAuditLogs(params);
+            if (rid !== undefined && rid !== this._requestId) return;
             this._total = data.total;
 
             const timeline = document.getElementById('audit-timeline');
@@ -101,12 +116,14 @@ window.AuditPage = {
             btn.style.display = (this._offset + this._limit < this._total) ? '' : 'none';
         } catch (e) {
             console.error('Erro ao carregar logs:', e);
+            Utils.toast('Erro ao carregar registros de auditoria', 'error');
         }
     },
 
     loadMore() {
         this._offset += this._limit;
-        this._loadLogs(true);
+        const rid = ++this._requestId;
+        this._loadLogs(true, rid);
     },
 
     _renderEntry(item) {
@@ -121,6 +138,9 @@ window.AuditPage = {
             update_skill: 'Editar skill',
             delete_skill: 'Excluir skill',
             import_skill: 'Importar skill',
+            change_password: 'Alterar senha',
+            select_condominio: 'Selecionar condomínio',
+            change_role: 'Alterar role',
         };
         const actionColors = {
             login: '#81c995',
@@ -133,6 +153,9 @@ window.AuditPage = {
             update_skill: '#7ba4db',
             delete_skill: '#e06c75',
             import_skill: '#7ba4db',
+            change_password: '#c678dd',
+            select_condominio: '#56b6c2',
+            change_role: '#e5c07b',
         };
 
         const label = actionLabels[item.action] || item.action;
@@ -145,10 +168,11 @@ window.AuditPage = {
                 if (d.title) detail = d.title;
                 if (d.name) detail = d.name;
                 if (d.session_id) detail = `sessão ${d.session_id}`;
+                if (d.condominio) detail = d.condominio;
             } catch (e) { /* */ }
         }
         if (item.resource_id && !detail) {
-            detail = `${item.resource_type} #${item.resource_id}`;
+            detail = `${Utils.escapeHtml(item.resource_type || '')} #${Utils.escapeHtml(String(item.resource_id))}`;
         }
 
         return `<div class="audit-entry">

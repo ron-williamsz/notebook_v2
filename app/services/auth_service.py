@@ -44,9 +44,18 @@ class AuthService:
         if not token:
             raise AuthenticationError(502, "Resposta inválida do servidor de autenticação")
 
-        # Determine role
-        admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
-        role = "admin" if email.strip().lower() in admin_list else "user"
+        # Determine role — consulta tabela user_roles (fallback: ADMIN_EMAILS env)
+        from app.models.user_role import UserRole
+        email_lower = email.strip().lower()
+        role_result = await self.db.execute(
+            select(UserRole).where(UserRole.user_email == email_lower)
+        )
+        user_role = role_result.scalar_one_or_none()
+        if user_role:
+            role = user_role.role
+        else:
+            admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+            role = "admin" if email_lower in admin_list else "user"
 
         # Create local auth session
         auth_session = AuthSession(

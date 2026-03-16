@@ -61,13 +61,33 @@ async def _migrate_add_columns(conn) -> None:
         pass
 
 
+async def _seed_admin_roles(conn) -> None:
+    """Garante que emails de ADMIN_EMAILS existam na tabela user_roles."""
+    admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+    for email in admin_list:
+        try:
+            existing = await conn.execute(
+                text("SELECT id FROM user_roles WHERE user_email = :email"),
+                {"email": email},
+            )
+            if not existing.first():
+                await conn.execute(
+                    text("INSERT INTO user_roles (user_email, role, updated_at) VALUES (:email, 'admin', datetime('now'))"),
+                    {"email": email},
+                )
+                logger.info("Seed: admin role for %s", email)
+        except Exception:
+            pass
+
+
 async def init_db():
     """Cria todas as tabelas no banco e aplica migrações."""
-    from app.models import Skill, SkillStep, SkillExample, Session, Source, ChatMessage, AuthSession, AuditLog  # noqa: F401
+    from app.models import Skill, SkillStep, SkillExample, Session, Source, ChatMessage, AuthSession, AuditLog, UserRole  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
         await _migrate_add_columns(conn)
+        await _seed_admin_roles(conn)
 
 
 async def get_db() -> AsyncSession:

@@ -49,17 +49,28 @@ async def log_audit(
     resource_id: str | None = None,
     details: dict | None = None,
 ) -> None:
-    """Helper para registrar ação no audit log."""
-    from app.services.audit_service import AuditService
-    svc = AuditService(db)
-    ip = request.client.host if request and request.client else None
-    await svc.log(
-        user_id=auth.user_id,
-        user_name=auth.user_name,
-        user_email=auth.user_email,
-        action=action,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        details=details,
-        ip_address=ip,
-    )
+    """Helper para registrar ação no audit log (fire-and-forget, nunca falha)."""
+    import logging
+    try:
+        from app.services.audit_service import AuditService
+        svc = AuditService(db)
+        # IP real: prioriza X-Forwarded-For (proxy/Docker), senão client.host
+        ip = None
+        if request:
+            forwarded = request.headers.get("x-forwarded-for")
+            if forwarded:
+                ip = forwarded.split(",")[0].strip()
+            elif request.client:
+                ip = request.client.host
+        await svc.log(
+            user_id=auth.user_id,
+            user_name=auth.user_name,
+            user_email=auth.user_email,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details,
+            ip_address=ip,
+        )
+    except Exception:
+        logging.getLogger(__name__).warning("Falha ao registrar audit log: %s", action, exc_info=True)
