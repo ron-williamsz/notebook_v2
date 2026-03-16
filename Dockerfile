@@ -21,4 +21,4 @@ RUN mkdir -p data/db data/uploads data/gosati data/examples data/conferencias
 
 EXPOSE 8008
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8008"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8008", "--proxy-headers", "--forwarded-allow-ips", "*"]

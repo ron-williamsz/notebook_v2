@@ -1,6 +1,7 @@
 """Etapas — CRUD e execução de Etapas dentro de uma sessão."""
 import asyncio
 import json
+import time
 
 from arq import create_pool
 from arq.connections import RedisSettings
@@ -69,9 +70,11 @@ async def execute_etapa(
         resource_type="etapa", resource_id=str(etapa_id),
         details={"session_id": session_id},
     )
-    # Limpa resultado de job anterior (ARQ dedup por job_id)
-    old_result_key = f"arq:result:etapa-{etapa_id}"
-    await redis.delete(old_result_key)
+    # Limpa keys ARQ do job anterior (dedup por job_id)
+    await redis.delete(
+        f"arq:result:etapa-{etapa_id}",
+        f"arq:retry:etapa-{etapa_id}",
+    )
 
     arq_pool = await create_pool(_arq_redis_settings(settings.redis_url))
     try:
@@ -95,12 +98,19 @@ async def stream_etapa(
 ):
     """SSE stream do progresso da etapa via Redis PubSub."""
     channel = ETAPA_CHANNEL.format(etapa_id=etapa_id)
+    max_duration = 1800  # 30 min — mesmo timeout do worker ARQ
 
     async def event_generator():
         pubsub = redis.pubsub()
         await pubsub.subscribe(channel)
+        started_at = time.monotonic()
         try:
             while True:
+                if time.monotonic() - started_at > max_duration:
+                    yield f'data: {json.dumps({"type": "error", "error": "Stream timeout"})}\n\n'
+                    yield "data: [DONE]\n\n"
+                    return
+
                 msg = await pubsub.get_message(
                     ignore_subscribe_messages=True, timeout=1.0
                 )

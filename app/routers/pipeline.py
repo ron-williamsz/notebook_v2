@@ -54,10 +54,6 @@ async def start_pipeline(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Limpa resultado de job anterior (ARQ dedup por job_id)
-    old_result_key = f"arq:result:pipeline-{session_id}"
-    await redis.delete(old_result_key)
-
     # Enfileira job no ARQ worker
     arq_pool = await create_pool(_arq_redis_settings(settings.redis_url))
     try:
@@ -109,11 +105,20 @@ async def stream_pipeline(
     """SSE stream do progresso do pipeline via Redis PubSub."""
     channel = PIPELINE_CHANNEL.format(session_id=session_id)
 
+    max_duration = 1800  # 30 min — mesmo timeout do worker ARQ
+
     async def event_generator():
         pubsub = redis.pubsub()
         await pubsub.subscribe(channel)
+        started_at = time.monotonic()
         try:
             while True:
+                # Timeout: encerra stream se exceder duração máxima
+                if time.monotonic() - started_at > max_duration:
+                    yield f'data: {json.dumps({"type": "error", "message": "Stream timeout"})}\n\n'
+                    yield "data: [DONE]\n\n"
+                    return
+
                 msg = await pubsub.get_message(
                     ignore_subscribe_messages=True, timeout=1.0
                 )

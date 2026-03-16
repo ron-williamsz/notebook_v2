@@ -11,6 +11,7 @@ services:
       - .env
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - TZ=America/Sao_Paulo
     restart: unless-stopped
     depends_on:
       - redis
@@ -28,6 +29,7 @@ services:
       - .env
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+      - TZ=America/Sao_Paulo
     restart: unless-stopped
     depends_on:
       - redis

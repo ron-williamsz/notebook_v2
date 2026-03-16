@@ -154,13 +154,19 @@ window.Pipeline = {
                 break;
             }
 
-            case 'error': {
-                if (statusEl) statusEl.textContent = `Erro: ${event.message}`;
+            case 'skill_error': {
                 const dot = document.getElementById(`pipeline-skill-status-${event.index}`);
                 if (dot) {
                     dot.className = 'pipeline-skill-status error';
                     dot.innerHTML = '&#10007;';
                 }
+                const info = document.getElementById(`pipeline-skill-info-${event.index}`);
+                if (info) info.textContent = event.message;
+                break;
+            }
+
+            case 'error': {
+                if (statusEl) statusEl.textContent = `Erro: ${event.message}`;
                 break;
             }
 

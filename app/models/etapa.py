@@ -18,4 +18,8 @@ class Etapa(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    session: Optional["Session"] = Relationship(
+        back_populates="etapas",
+        sa_relationship_kwargs={"lazy": "noload"},
+    )  # noqa: F821
     skill: Optional["Skill"] = Relationship()  # noqa: F821

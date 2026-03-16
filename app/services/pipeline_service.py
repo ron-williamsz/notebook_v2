@@ -49,13 +49,30 @@ class PipelineService:
         if existing == "running":
             raise ValueError("Pipeline já em execução para esta sessão")
 
+        # Limpa estado anterior do pipeline no Redis
+        await self.redis.delete(pipe_key)
+
         # Remove TODAS as etapas anteriores desta sessão (evita duplicatas)
+        # e limpa keys ARQ órfãs (result/retry) das etapas antigas
         old_etapas = await self.db.execute(
             select(Etapa).where(Etapa.session_id == session_id)
         )
+        old_etapa_ids = []
         for e in old_etapas.scalars().all():
+            old_etapa_ids.append(e.id)
             await self.db.delete(e)
         await self.db.commit()
+
+        # Limpa keys ARQ órfãs das etapas e pipeline anteriores
+        cleanup_keys = [
+            f"arq:result:pipeline-{session_id}",
+            f"arq:retry:pipeline-{session_id}",
+        ]
+        for eid in old_etapa_ids:
+            cleanup_keys.append(f"arq:result:etapa-{eid}")
+            cleanup_keys.append(f"arq:retry:etapa-{eid}")
+        if cleanup_keys:
+            await self.redis.delete(*cleanup_keys)
 
         # Cria etapas para cada skill
         etapa_svc = EtapaService(self.db, self.settings)
@@ -275,18 +292,15 @@ async def execute_pipeline_job(session_id: int, etapa_ids: list[int]) -> None:
 
         except Exception as e:
             logger.error("Pipeline sessão %d erro na etapa %d: %s", session_id, etapa_id, e)
-            await redis.hset(pipe_key, mapping={
-                "status": "error",
-                "error": str(e),
-            })
             await redis.publish(channel, json.dumps({
-                "type": "error",
+                "type": "skill_error",
                 "index": idx,
                 "etapa_id": etapa_id,
                 "skill_name": skill_name,
                 "message": str(e),
             }))
-            return
+            # Continua para a próxima etapa ao invés de parar o pipeline
+            continue
 
     # Pipeline completo
     await redis.hset(pipe_key, "status", "done")

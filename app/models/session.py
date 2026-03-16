@@ -26,3 +26,7 @@ class Session(SQLModel, table=True):
         back_populates="session",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
+    etapas: list["Etapa"] = Relationship(
+        back_populates="session",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )

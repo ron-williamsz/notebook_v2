@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     admin_emails: str = ""  # Comma-separated admin emails
 
     # Redis
-    redis_url: str = "redis://redis:6379/0"
+    redis_url: str = "redis://notebook-zang-redis:6379/0"
 
     # App
     app_host: str = "0.0.0.0"

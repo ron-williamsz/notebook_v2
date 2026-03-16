@@ -9,6 +9,7 @@ Pipeline:
 import asyncio
 import json
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -678,20 +679,58 @@ class EtapaService:
             logger.info("DEBUG 3938352 NÃO ESTÁ em despesas_com_link")
         if despesas_com_link:
             if has_existing_docs:
-                # Filtra apenas despesas cujo comprovante ainda não foi baixado
+                # Mapa de lançamentos locais (existentes) e da origem (GoSATI)
                 existing_lanc_nums = set()
+                existing_lanc_sources: dict[str, list[Source]] = {}
                 for src in existing_gosati_docs:
                     m = re.search(r"Lanç\.(\d+)", src.label or "")
                     if m:
-                        existing_lanc_nums.add(m.group(1))
+                        lanc = m.group(1)
+                        existing_lanc_nums.add(lanc)
+                        existing_lanc_sources.setdefault(lanc, []).append(src)
+
+                gosati_lanc_nums = set(
+                    str(d.get("numero_lancamento", ""))
+                    for d in despesas_com_link
+                )
+
+                # Docs novos no GoSATI que ainda não temos localmente
                 missing = [
                     d for d in despesas_com_link
                     if str(d.get("numero_lancamento", "")) not in existing_lanc_nums
                 ]
+
+                # Docs locais cujo lançamento não existe mais no GoSATI (removidos na origem)
+                orphaned_lancs = existing_lanc_nums - gosati_lanc_nums
+                orphaned_sources: list[Source] = []
+                for lanc in orphaned_lancs:
+                    orphaned_sources.extend(existing_lanc_sources.get(lanc, []))
+
                 logger.info(
-                    "Auto-fetch: despesas_com_link=%d, existing_lanc=%d, missing=%d",
-                    len(despesas_com_link), len(existing_lanc_nums), len(missing),
+                    "Auto-fetch: despesas_com_link=%d, existing_lanc=%d, missing=%d, orphaned=%d",
+                    len(despesas_com_link), len(existing_lanc_nums),
+                    len(missing), len(orphaned_sources),
                 )
+
+                # Remove docs órfãos (comprovantes removidos na origem)
+                if orphaned_sources:
+                    for src in orphaned_sources:
+                        logger.info(
+                            "Auto-fetch: removendo doc órfão id=%s label='%s' (sessão %d)",
+                            src.id, src.label, session_id,
+                        )
+                        for path in [src.file_path, src.text_path]:
+                            if path:
+                                try:
+                                    os.remove(path)
+                                except FileNotFoundError:
+                                    pass
+                        await self.db.delete(src)
+                        session.source_count = max(0, session.source_count - 1)
+                    await self.db.commit()
+                    if progress_cb:
+                        progress_cb(f"Removidos {len(orphaned_sources)} comprovante(s) não mais presentes no GoSATI...")
+
                 if missing:
                     if progress_cb:
                         progress_cb(f"Baixando {len(missing)} comprovante(s) faltante(s)...")
@@ -704,7 +743,7 @@ class EtapaService:
                         "Auto-fetch: %d comprovantes complementares para sessão %d",
                         len(saved), session_id,
                     )
-                else:
+                elif not orphaned_sources:
                     if progress_cb:
                         progress_cb(f"Reutilizando {len(existing_gosati_docs)} comprovantes existentes...")
                     logger.info(
@@ -723,6 +762,31 @@ class EtapaService:
                     "Auto-fetch: %d comprovantes baixados para sessão %d",
                     len(saved), session_id,
                 )
+
+        elif has_existing_docs:
+            # Nenhuma despesa com comprovante no GoSATI, mas temos docs locais
+            # → todos os comprovantes foram removidos na origem
+            logger.info(
+                "Auto-fetch: GoSATI retornou 0 despesas com comprovante, "
+                "mas existem %d docs locais — removendo todos (sessão %d)",
+                len(existing_gosati_docs), session_id,
+            )
+            for src in existing_gosati_docs:
+                logger.info(
+                    "Auto-fetch: removendo doc órfão id=%s label='%s' (sessão %d)",
+                    src.id, src.label, session_id,
+                )
+                for path in [src.file_path, src.text_path]:
+                    if path:
+                        try:
+                            os.remove(path)
+                        except FileNotFoundError:
+                            pass
+                await self.db.delete(src)
+                session.source_count = max(0, session.source_count - 1)
+            await self.db.commit()
+            if progress_cb:
+                progress_cb(f"Removidos {len(existing_gosati_docs)} comprovante(s) — não há mais comprovantes no GoSATI")
 
         logger.info(
             "Auto-fetch GoSATI para etapa sessão %d (skill %s, cond %d, %02d/%d) — "
