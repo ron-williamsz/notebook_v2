@@ -1,8 +1,8 @@
 """CRUD de Sessions (notebooks do usuário)."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import require_auth
+from app.core.dependencies import log_audit, require_auth
 from app.models.auth_session import AuthSession
 from app.models.base import get_db
 from app.schemas.session import GoSatiSelection, SessionCreate, SessionResponse
@@ -23,10 +23,18 @@ async def list_sessions(svc: SessionService = Depends(_svc)):
 @router.post("", response_model=SessionResponse, status_code=201)
 async def create_session(
     data: SessionCreate,
+    request: Request,
     svc: SessionService = Depends(_svc),
     auth: AuthSession = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await svc.create(data, auth)
+    session = await svc.create(data, auth)
+    await log_audit(
+        db, auth, "create_notebook", request,
+        resource_type="session", resource_id=str(session.id),
+        details={"title": session.title},
+    )
+    return session
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -47,5 +55,15 @@ async def get_coverage(session_id: int, svc: SessionService = Depends(_svc)):
 
 
 @router.delete("/{session_id}", status_code=204)
-async def delete_session(session_id: int, svc: SessionService = Depends(_svc)):
+async def delete_session(
+    session_id: int,
+    request: Request,
+    svc: SessionService = Depends(_svc),
+    auth: AuthSession = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    await log_audit(
+        db, auth, "delete_notebook", request,
+        resource_type="session", resource_id=str(session_id),
+    )
     await svc.delete(session_id)

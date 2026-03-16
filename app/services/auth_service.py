@@ -44,12 +44,17 @@ class AuthService:
         if not token:
             raise AuthenticationError(502, "Resposta inválida do servidor de autenticação")
 
+        # Determine role
+        admin_list = [e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()]
+        role = "admin" if email.strip().lower() in admin_list else "user"
+
         # Create local auth session
         auth_session = AuthSession(
             user_id=user.get("id", 0),
             user_name=user.get("name", email.split("@")[0]),
             user_email=email,
             bdforall_token=token,
+            role=role,
         )
         self.db.add(auth_session)
         await self.db.commit()

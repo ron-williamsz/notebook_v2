@@ -1,9 +1,11 @@
 """CRUD de Skills (admin)."""
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.dependencies import log_audit, require_admin
 from app.core.exceptions import NotFoundError
+from app.models.auth_session import AuthSession
 from app.models.base import get_db
 from app.schemas.criterio import CriteriaSyncRequest, CriterionResponse
 from app.schemas.skill import (
@@ -33,8 +35,20 @@ async def list_skills(svc: SkillService = Depends(_svc)):
 
 
 @router.post("", response_model=SkillResponse, status_code=201)
-async def create_skill(data: SkillCreate, svc: SkillService = Depends(_svc)):
-    return await svc.create(data)
+async def create_skill(
+    data: SkillCreate,
+    request: Request,
+    svc: SkillService = Depends(_svc),
+    auth: AuthSession = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    skill = await svc.create(data)
+    await log_audit(
+        db, auth, "create_skill", request,
+        resource_type="skill", resource_id=str(skill.id),
+        details={"name": skill.name},
+    )
+    return skill
 
 
 @router.get("/{skill_id}", response_model=SkillResponse)
@@ -43,12 +57,35 @@ async def get_skill(skill_id: int, svc: SkillService = Depends(_svc)):
 
 
 @router.put("/{skill_id}", response_model=SkillResponse)
-async def update_skill(skill_id: int, data: SkillUpdate, svc: SkillService = Depends(_svc)):
-    return await svc.update(skill_id, data)
+async def update_skill(
+    skill_id: int,
+    data: SkillUpdate,
+    request: Request,
+    svc: SkillService = Depends(_svc),
+    auth: AuthSession = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    skill = await svc.update(skill_id, data)
+    await log_audit(
+        db, auth, "update_skill", request,
+        resource_type="skill", resource_id=str(skill_id),
+        details={"name": data.name},
+    )
+    return skill
 
 
 @router.delete("/{skill_id}", status_code=204)
-async def delete_skill(skill_id: int, svc: SkillService = Depends(_svc)):
+async def delete_skill(
+    skill_id: int,
+    request: Request,
+    svc: SkillService = Depends(_svc),
+    auth: AuthSession = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    await log_audit(
+        db, auth, "delete_skill", request,
+        resource_type="skill", resource_id=str(skill_id),
+    )
     await svc.delete(skill_id)
 
 
@@ -118,10 +155,22 @@ async def export_skill(skill_id: int, svc: SkillService = Depends(_svc)):
 
 
 @router.post("/import", response_model=SkillResponse, status_code=201)
-async def import_skill(file: UploadFile = File(...), svc: SkillService = Depends(_svc)):
+async def import_skill(
+    file: UploadFile = File(...),
+    request: Request = None,
+    svc: SkillService = Depends(_svc),
+    auth: AuthSession = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
     """Importa skill de um arquivo ZIP."""
     content = await file.read()
     try:
-        return await svc.import_skill(content)
+        skill = await svc.import_skill(content)
     except NotFoundError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
+    await log_audit(
+        db, auth, "import_skill", request,
+        resource_type="skill", resource_id=str(skill.id),
+        details={"name": skill.name},
+    )
+    return skill

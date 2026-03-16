@@ -6,14 +6,16 @@ import time
 
 from arq import create_pool
 from arq.connections import RedisSettings
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from urllib.parse import urlparse
 
 from app.core.config import Settings, get_settings
+from app.core.dependencies import log_audit, require_auth
 from app.core.redis import get_redis
+from app.models.auth_session import AuthSession
 from app.models.base import get_db
 from app.services.pipeline_service import PipelineService, PIPELINE_CHANNEL
 
@@ -35,11 +37,17 @@ def _arq_redis_settings(url: str) -> RedisSettings:
 @router.post("/start")
 async def start_pipeline(
     session_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
     redis: Redis = Depends(get_redis),
+    auth: AuthSession = Depends(require_auth),
 ):
     """Inicia pipeline: cria etapas para todas as skills e enfileira execução."""
+    await log_audit(
+        db, auth, "execute_pipeline", request,
+        resource_type="session", resource_id=str(session_id),
+    )
     svc = PipelineService(db, settings, redis)
     try:
         result = await svc.start_pipeline(session_id)

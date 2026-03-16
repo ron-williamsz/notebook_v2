@@ -1,8 +1,8 @@
 """Rotas de autenticação."""
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import COOKIE_NAME, require_auth
+from app.core.dependencies import COOKIE_NAME, log_audit, require_auth
 from app.models.auth_session import AuthSession
 from app.models.base import get_db
 from app.schemas.auth import (
@@ -22,7 +22,13 @@ def _svc(db: AsyncSession = Depends(get_db)) -> AuthService:
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(data: LoginRequest, response: Response, svc: AuthService = Depends(_svc)):
+async def login(
+    data: LoginRequest,
+    request: Request,
+    response: Response,
+    svc: AuthService = Depends(_svc),
+    db: AsyncSession = Depends(get_db),
+):
     auth_session, senha_temporaria = await svc.login(data.email, data.senha)
     response.set_cookie(
         key=COOKIE_NAME,
@@ -32,6 +38,7 @@ async def login(data: LoginRequest, response: Response, svc: AuthService = Depen
         max_age=43200,  # 12 hours
         path="/",
     )
+    await log_audit(db, auth_session, "login", request)
     return LoginResponse(
         user_name=auth_session.user_name,
         user_email=auth_session.user_email,
@@ -41,10 +48,13 @@ async def login(data: LoginRequest, response: Response, svc: AuthService = Depen
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     response: Response,
     auth_session: AuthSession = Depends(require_auth),
     svc: AuthService = Depends(_svc),
+    db: AsyncSession = Depends(get_db),
 ):
+    await log_audit(db, auth_session, "logout", request)
     await svc.logout(auth_session.id)
     response.delete_cookie(key=COOKIE_NAME, path="/")
     return {"detail": "Logout realizado"}

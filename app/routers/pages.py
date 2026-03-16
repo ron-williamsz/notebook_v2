@@ -17,6 +17,7 @@ def _ctx(request: Request, auth: AuthSession, **extra) -> dict:
         "user_name": auth.user_name,
         "cond_codigo": auth.selected_cond_codigo,
         "cond_nome": auth.selected_cond_nome,
+        "is_admin": getattr(auth, "role", "user") == "admin",
         **extra,
     }
 
@@ -53,10 +54,14 @@ async def notebook_page(request: Request, session_id: int, auth: AuthSession | N
     return templates.TemplateResponse("notebook.html", _ctx(request, auth, session_id=session_id))
 
 
+# --- Admin (role check) ---
+
 @router.get("/admin/skills", response_class=HTMLResponse)
 async def skills_admin_page(request: Request, auth: AuthSession | None = Depends(get_auth_session)):
     if not auth:
         return RedirectResponse("/login", status_code=302)
+    if getattr(auth, "role", "user") != "admin":
+        return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse("admin/skills.html", _ctx(request, auth))
 
 
@@ -64,6 +69,8 @@ async def skills_admin_page(request: Request, auth: AuthSession | None = Depends
 async def skill_new_page(request: Request, auth: AuthSession | None = Depends(get_auth_session)):
     if not auth:
         return RedirectResponse("/login", status_code=302)
+    if getattr(auth, "role", "user") != "admin":
+        return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse("admin/skill_editor.html", _ctx(request, auth, skill_id=0))
 
 
@@ -71,4 +78,15 @@ async def skill_new_page(request: Request, auth: AuthSession | None = Depends(ge
 async def skill_editor_page(request: Request, skill_id: int, auth: AuthSession | None = Depends(get_auth_session)):
     if not auth:
         return RedirectResponse("/login", status_code=302)
+    if getattr(auth, "role", "user") != "admin":
+        return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse("admin/skill_editor.html", _ctx(request, auth, skill_id=skill_id))
+
+
+@router.get("/admin/audit", response_class=HTMLResponse)
+async def audit_page(request: Request, auth: AuthSession | None = Depends(get_auth_session)):
+    if not auth:
+        return RedirectResponse("/login", status_code=302)
+    if getattr(auth, "role", "user") != "admin":
+        return RedirectResponse("/", status_code=302)
+    return templates.TemplateResponse("admin/audit.html", _ctx(request, auth))

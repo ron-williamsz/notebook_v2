@@ -18,5 +18,6 @@ class AuthSession(SQLModel, table=True):
     expires_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc) + timedelta(hours=12)
     )
+    role: str = Field(default="user", max_length=20)  # "user" or "admin"
     selected_cond_codigo: int | None = Field(default=None)
     selected_cond_nome: str | None = Field(default=None)

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # Auth
     auth_username: str = "admin"
     auth_password: str = "admin"
+    admin_emails: str = ""  # Comma-separated admin emails
 
     # Redis
     redis_url: str = "redis://redis:6379/0"

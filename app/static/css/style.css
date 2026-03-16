@@ -1987,6 +1987,118 @@ mark.hist-sem-nf {
 }
 
 /* ===========================================================
+   Audit Page
+   =========================================================== */
+.audit-counters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+.audit-counter-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    flex: 1;
+    min-width: 120px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.audit-counter-value {
+    font-size: 1.6rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.audit-counter-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.audit-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+.audit-users-section {
+    margin-bottom: 20px;
+}
+.audit-users-section h3 {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+.audit-users-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.audit-user-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+.audit-user-name { color: var(--text-primary); min-width: 140px; }
+.audit-user-email { color: var(--text-muted); flex: 1; }
+.audit-user-actions { color: var(--accent); min-width: 80px; text-align: right; }
+.audit-user-last { color: var(--text-muted); min-width: 120px; text-align: right; font-size: 0.8rem; }
+
+.audit-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.audit-entry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+.audit-entry-time {
+    color: var(--text-muted);
+    min-width: 130px;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+.audit-entry-user {
+    color: var(--text-primary);
+    min-width: 120px;
+}
+.audit-action-badge {
+    font-size: 0.75rem;
+    padding: 2px 10px;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--badge-color) 15%, transparent);
+    color: var(--badge-color);
+    white-space: nowrap;
+    min-width: 100px;
+    text-align: center;
+}
+.audit-entry-detail {
+    color: var(--text-secondary);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.audit-entry-ip {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    min-width: 90px;
+    text-align: right;
+}
+
+/* ===========================================================
    Responsive — Tablet (768px – 1024px)
    =========================================================== */
 @media (max-width: 1024px) {

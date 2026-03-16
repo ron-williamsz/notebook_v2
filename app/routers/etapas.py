@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from urllib.parse import urlparse
 
 from app.core.config import Settings, get_settings
+from app.core.dependencies import log_audit, require_auth
 from app.core.redis import get_redis
+from app.models.auth_session import AuthSession
 from app.models.base import get_db
 from app.schemas.etapa import EtapaCreate
 from app.services.etapa_service import EtapaService
@@ -55,10 +57,18 @@ async def create_etapa(
 async def execute_etapa(
     session_id: int,
     etapa_id: int,
+    request: Request,
     settings: Settings = Depends(get_settings),
     redis: Redis = Depends(get_redis),
+    auth: AuthSession = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
 ):
     """Enfileira execução da etapa no worker ARQ (independente do browser)."""
+    await log_audit(
+        db, auth, "execute_skill", request,
+        resource_type="etapa", resource_id=str(etapa_id),
+        details={"session_id": session_id},
+    )
     # Limpa resultado de job anterior (ARQ dedup por job_id)
     old_result_key = f"arq:result:etapa-{etapa_id}"
     await redis.delete(old_result_key)

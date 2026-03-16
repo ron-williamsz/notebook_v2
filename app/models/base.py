@@ -41,6 +41,7 @@ async def _migrate_add_columns(conn) -> None:
         ("skills", "gosati_filters", "TEXT"),
         ("auth_sessions", "selected_cond_codigo", "INTEGER"),
         ("auth_sessions", "selected_cond_nome", "VARCHAR"),
+        ("auth_sessions", "role", "VARCHAR DEFAULT 'user'"),
     ]
     for table, column, col_type in columns:
         try:
@@ -62,7 +63,7 @@ async def _migrate_add_columns(conn) -> None:
 
 async def init_db():
     """Cria todas as tabelas no banco e aplica migrações."""
-    from app.models import Skill, SkillStep, SkillExample, Session, Source, ChatMessage, AuthSession  # noqa: F401
+    from app.models import Skill, SkillStep, SkillExample, Session, Source, ChatMessage, AuthSession, AuditLog  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
