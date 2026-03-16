@@ -546,10 +546,14 @@ class EtapaService:
         has_existing_docs = len(existing_gosati_docs) > 0
 
         # Só remove o texto filtrado anterior (será recriado com filtros da skill atual)
-        for src in existing_gosati_text:
-            await self.db.delete(src)
-            session.source_count = max(0, session.source_count - 1)
-        await self.db.commit()
+        if existing_gosati_text:
+            deleted_text_ids = {src.id for src in existing_gosati_text}
+            for src in existing_gosati_text:
+                await self.db.delete(src)
+                session.source_count = max(0, session.source_count - 1)
+            # Invalidate stale prestacao_source_id refs in etapa results
+            await self.source_svc._invalidate_etapa_source_refs(session_id, deleted_text_ids)
+            await self.db.commit()
 
         gosati_svc = GoSatiService(self.db, self.settings)
 

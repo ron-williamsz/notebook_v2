@@ -278,8 +278,9 @@ window.Etapas = {
         }
 
         // Botão para abrir arquivo fonte da prestação
-        const openFileBtn = prestacaoSourceId
-            ? `<button class="btn btn-ghost btn-xs hist-open-file" onclick="event.stopPropagation(); Etapas.openViewer('/api/v1/sessions/${this.sessionId}/sources/${prestacaoSourceId}/file', 'text/plain', 'Prestação GoSATI')" title="Abrir arquivo da prestação">
+        const validPrestId = Number(prestacaoSourceId) > 0 ? prestacaoSourceId : null;
+        const openFileBtn = validPrestId
+            ? `<button class="btn btn-ghost btn-xs hist-open-file" onclick="event.stopPropagation(); Etapas.openViewer('/api/v1/sessions/${this.sessionId}/sources/${validPrestId}/file', 'text/plain', 'Prestação GoSATI')" title="Abrir arquivo da prestação">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
                     <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
@@ -396,11 +397,16 @@ window.Etapas = {
     },
 
     _renderDocs(docs) {
-        if (!docs.length) {
+        // Filter out docs with invalid source_id (deleted, undefined, negative, or string)
+        const validDocs = docs.filter(d => {
+            const id = Number(d.source_id);
+            return !isNaN(id) && Number.isInteger(id) && id > 0;
+        });
+        if (!validDocs.length) {
             return '<div class="lanc-docs-empty">Nenhum documento disponível</div>';
         }
 
-        const icons = docs.map(doc => {
+        const icons = validDocs.map(doc => {
             const isImage = doc.mime_type && doc.mime_type.startsWith('image/');
             const isPdf = doc.mime_type === 'application/pdf';
             const fileUrl = `/api/v1/sessions/${this.sessionId}/sources/${doc.source_id}/file`;
@@ -473,6 +479,13 @@ window.Etapas = {
         const title = document.getElementById('doc-viewer-title');
         const body = document.getElementById('doc-viewer-body');
         if (!overlay || !body) return;
+        // Guard: reject malformed URLs (e.g. containing NaN, undefined, negative IDs)
+        if (!url || /\/(NaN|undefined|null|-\d+)(?:\/|$)/.test(url)) {
+            title.textContent = label || 'Erro';
+            overlay.classList.remove('hidden');
+            body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted)">Referência de documento inválida</div>';
+            return;
+        }
 
         title.textContent = label;
         overlay.classList.remove('hidden');
@@ -488,11 +501,12 @@ window.Etapas = {
         try {
             const resp = await fetch(inlineUrl, { method: 'HEAD' });
             if (!resp.ok) {
-                body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);flex-direction:column;gap:12px">
+                body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);flex-direction:column;gap:12px;text-align:center;padding:24px">
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.5">
                         <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
                     </svg>
                     <span>Documento não encontrado</span>
+                    <span style="font-size:0.85em;opacity:0.7">O arquivo pode ter sido removido. Re-execute a etapa para baixar novamente.</span>
                 </div>`;
                 return;
             }
