@@ -84,4 +84,4 @@ async def list_condominios(
         ]
 
     condominios.sort(key=lambda c: c["codigo"])
-    return condominios[:200]
+    return condominios
