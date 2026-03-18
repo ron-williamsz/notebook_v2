@@ -1377,6 +1377,13 @@ mark.hist-sem-nf {
     color: var(--text-muted);
     margin: 0 2px;
 }
+.ci-explicacao {
+    display: block;
+    font-size: 0.78rem;
+    color: #f0c040;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
 
 /* Badges */
 .criterio-badge {

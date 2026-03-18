@@ -220,9 +220,19 @@ window.Etapas = {
                                  : r.resultado === 'DIVERGENCIA' ? 'DIVERG.'
                                  : 'AUSENTE';
 
-                let detalhes = Utils.escapeHtml(r.detalhes || '');
+                let detalhes = '';
+                const explicacao = Utils.escapeHtml(r.detalhes || '');
                 if (r.valores && r.valores.encontrado && r.valores.esperado) {
-                    detalhes = `<span class="ci-val">Encontrado: ${Utils.escapeHtml(r.valores.encontrado)}</span> <span class="ci-val-sep">→</span> <span class="ci-val">Esperado: ${Utils.escapeHtml(r.valores.esperado)}</span>`;
+                    if (explicacao && r.resultado !== 'APROVADO') {
+                        detalhes = `<span class="ci-explicacao">${explicacao}</span>`
+                            + `<span class="ci-val">Encontrado: ${Utils.escapeHtml(r.valores.encontrado)}</span>`
+                            + `<span class="ci-val-sep">→</span>`
+                            + `<span class="ci-val">Esperado: ${Utils.escapeHtml(r.valores.esperado)}</span>`;
+                    } else {
+                        detalhes = `<span class="ci-val">Encontrado: ${Utils.escapeHtml(r.valores.encontrado)}</span> <span class="ci-val-sep">→</span> <span class="ci-val">Esperado: ${Utils.escapeHtml(r.valores.esperado)}</span>`;
+                    }
+                } else {
+                    detalhes = explicacao;
                 }
 
                 const info = r.lancamento_info || {};
