@@ -198,9 +198,9 @@ class CriteriaEngine:
                 nf_ref = m.group(0).strip() if m else "NF"
                 found = True
                 found_detail = f"{config.documento_nome} encontrado (histórico: {nf_ref})"
-            elif is_nf_related and self._RE_HISTORICO_NF_SEM_NUMERO.search(historico):
-                # Histórico menciona "NF" mas sem número — documento pode existir,
-                # porém o número da NF está ausente no histórico
+            elif is_nf_related:
+                # Histórico não menciona NF de nenhuma forma, ou menciona "NF"
+                # sem número — documento pode existir, mas referência ausente
                 nf_sem_numero = True
 
             # Se explicitamente ausente, não buscar nos docs
@@ -285,13 +285,18 @@ class CriteriaEngine:
 
             if found and nf_sem_numero:
                 # Documento existe mas o número da NF está ausente no histórico
+                has_nf_mention = self._RE_HISTORICO_NF_SEM_NUMERO.search(historico)
+                if has_nf_mention:
+                    detail_msg = f"{config.documento_nome} encontrado, porém número da NF ausente no histórico"
+                else:
+                    detail_msg = f"{config.documento_nome} encontrado, porém histórico não referencia NF/NFE"
                 results.append(CriterionResult(
                     lancamento=num,
                     criterio_nome=criterio_nome,
                     criterio_tipo="presenca_documento",
                     documento_tipo=config.documento_nome,
                     resultado="DIVERGENCIA",
-                    detalhes=f"{config.documento_nome} encontrado, porém número da NF ausente no histórico",
+                    detalhes=detail_msg,
                 ))
             elif found:
                 results.append(CriterionResult(
