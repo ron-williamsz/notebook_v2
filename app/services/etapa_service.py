@@ -216,6 +216,23 @@ class EtapaService:
                 )
                 result["type"] = "criterios"
                 result["criterios"] = criteria_result
+
+                # Se ##SOMENTE_DIVERGENCIAS, filtra lancamentos para manter
+                # apenas os que possuem divergência em algum critério
+                macro_upper = (skill.macro_instruction or "").upper()
+                if "##SOMENTE_DIVERGENCIAS" in macro_upper:
+                    div_lancs = set()
+                    for grupo in criteria_result.get("grupos", []):
+                        for item in grupo.get("itens", []):
+                            if item.get("resultado") in ("DIVERGENCIA", "ITEM_AUSENTE"):
+                                div_lancs.add(str(item.get("lancamento", "")))
+                    if div_lancs:
+                        result["lancamentos"] = [
+                            l for l in result.get("lancamentos", [])
+                            if str(l.get("numero_lancamento", "")) in div_lancs
+                        ]
+                        result["total"] = len(result["lancamentos"])
+
                 yield f"data: {json.dumps({'criteria_result': criteria_result})}\n\n"
 
             elif skill.steps:
@@ -817,7 +834,28 @@ class EtapaService:
             docs_by_lancamento=docs_by_lanc,
             progress_cb=progress_cb,
         )
-        return result.model_dump()
+        data = result.model_dump()
+
+        # Filtra saída: se macro_instruction contém "##SOMENTE_DIVERGENCIAS",
+        # remove itens APROVADO dos grupos (ex: skill NFTS mostra só fora de SP)
+        macro = (skill.macro_instruction or "").upper()
+        if "##SOMENTE_DIVERGENCIAS" in macro:
+            for grupo in data.get("grupos", []):
+                itens = grupo.get("itens", [])
+                filtered = [i for i in itens if i.get("resultado") != "APROVADO"]
+                grupo["itens"] = filtered
+                grupo["total"] = len(filtered)
+                grupo["aprovados"] = 0
+                grupo["divergencias"] = sum(1 for i in filtered if i["resultado"] == "DIVERGENCIA")
+                grupo["ausentes"] = sum(1 for i in filtered if i["resultado"] == "ITEM_AUSENTE")
+            # Recalcula resumo
+            resumo = data.get("resumo", {})
+            resumo["total_verificacoes"] = sum(g["total"] for g in data["grupos"])
+            resumo["aprovados"] = 0
+            resumo["divergencias"] = sum(g["divergencias"] for g in data["grupos"])
+            resumo["itens_ausentes"] = sum(g["ausentes"] for g in data["grupos"])
+
+        return data
 
     async def _load_docs_by_lancamento(
         self, session_id: int, lancamentos: list[dict]
@@ -835,6 +873,7 @@ class EtapaService:
                 "filename": src.filename,
                 "mime_type": src.mime_type,
                 "file_path": src.file_path,
+                "size_bytes": src.size_bytes or 0,
             }
             # Carrega texto extraído se disponível
             if src.text_path:
