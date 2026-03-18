@@ -144,6 +144,11 @@ class CriteriaEngine:
         r"SEM\s+NF|S/\s*NF|SEM\s+NOTA",
         re.IGNORECASE,
     )
+    # Detecta "NF" ou "NFE" no histórico SEM número após (ex: "... NF", "... NF.")
+    _RE_HISTORICO_NF_SEM_NUMERO = re.compile(
+        r"\bNFE?\s*[.\-,;)]*\s*$|\bNFE?\s*[.\-,;)]+\s",
+        re.IGNORECASE,
+    )
 
     def _eval_presenca(
         self,
@@ -185,6 +190,7 @@ class CriteriaEngine:
                 term in config.documento_nome.lower()
                 for term in ("nota fiscal", "nf", "nfe", "danfe")
             )
+            nf_sem_numero = False
             if is_nf_related and self._RE_HISTORICO_SEM_NF.search(historico):
                 explicitly_absent = True
             elif is_nf_related and self._RE_HISTORICO_TEM_NF.search(historico):
@@ -192,6 +198,10 @@ class CriteriaEngine:
                 nf_ref = m.group(0).strip() if m else "NF"
                 found = True
                 found_detail = f"{config.documento_nome} encontrado (histórico: {nf_ref})"
+            elif is_nf_related and self._RE_HISTORICO_NF_SEM_NUMERO.search(historico):
+                # Histórico menciona "NF" mas sem número — documento pode existir,
+                # porém o número da NF está ausente no histórico
+                nf_sem_numero = True
 
             # Se explicitamente ausente, não buscar nos docs
             # (evita falso positivo por keyword "nf" dentro de labels como "SEM NF")
@@ -273,7 +283,17 @@ class CriteriaEngine:
                         num, len(mime_candidates),
                     )
 
-            if found:
+            if found and nf_sem_numero:
+                # Documento existe mas o número da NF está ausente no histórico
+                results.append(CriterionResult(
+                    lancamento=num,
+                    criterio_nome=criterio_nome,
+                    criterio_tipo="presenca_documento",
+                    documento_tipo=config.documento_nome,
+                    resultado="DIVERGENCIA",
+                    detalhes=f"{config.documento_nome} encontrado, porém número da NF ausente no histórico",
+                ))
+            elif found:
                 results.append(CriterionResult(
                     lancamento=num,
                     criterio_nome=criterio_nome,
