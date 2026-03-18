@@ -413,7 +413,7 @@ class CriteriaEngine:
 
             # Resolve valor de referência
             ref_value = self._resolve_reference(config.comparar_com, lanc)
-            if not ref_value:
+            if not ref_value and not config.instrucao_busca:
                 results.append(CriterionResult(
                     lancamento=num,
                     criterio_nome=criterio_nome,
@@ -423,6 +423,9 @@ class CriteriaEngine:
                     detalhes=f"Nenhum valor de referência fornecido ({config.comparar_com})",
                 ))
                 continue
+            # Se não tem ref_value mas tem instrução, usa a instrução como guia
+            if not ref_value:
+                ref_value = config.instrucao_busca
 
             batch.append({
                 "lancamento": num,
