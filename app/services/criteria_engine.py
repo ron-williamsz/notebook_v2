@@ -1027,7 +1027,8 @@ class CriteriaEngine:
         """Encontra documento pelo tipo/nome usando keywords + sinônimos + mime_type.
 
         Busca em: label + filename + texto_extraido (concatenados).
-        Fallback: retorna primeiro candidato se há docs do mime correto.
+        Fallback inteligente: para NF, prefere o maior PDF (provável NF escaneada).
+        Para outros tipos, retorna primeiro candidato.
         """
         tipo_lower = tipo_busca.lower()
         # Expande sinônimos: "nota fiscal" → ["nota fiscal", "nf ", "nfe", ...]
@@ -1036,6 +1037,11 @@ class CriteriaEngine:
             if key in tipo_lower or tipo_lower in key:
                 search_terms = syns
                 break
+
+        is_nf_search = any(
+            term in tipo_lower
+            for term in ("nota fiscal", "nf", "nfe", "danfe")
+        )
 
         candidates = []
         for doc in docs:
@@ -1053,10 +1059,37 @@ class CriteriaEngine:
             texto = " ".join(parts).lower()
             if any(term in texto for term in search_terms):
                 return doc
-        # Fallback: se não matchou por keyword, retorna primeiro candidato do mime
-        # (GoSATI labels são frequentemente genéricos)
+
+        # Fallback inteligente
         if candidates:
-            return candidates[0]
+            if is_nf_search:
+                # Para NF: exclui docs claramente identificados como comprovante/espelho
+                # e prefere o maior PDF (NFs escaneadas tendem a ser maiores)
+                _EXCLUDE_LABELS = {"comprovante de pagamento", "espelho de lançamento",
+                                   "espelho de lancamento", "comprovante de pagamento eletrônico",
+                                   "comprovante de pagamento eletronico"}
+                nf_candidates = []
+                for doc in candidates:
+                    label = (doc.get("label") or "").lower()
+                    # Extrai a parte do tipo (antes de "Lanç.")
+                    tipo_part = label.split("lanç.")[0].strip()
+                    # Remove prefixo "documento pdf (" se houver
+                    if tipo_part.startswith("documento pdf"):
+                        inner = tipo_part.replace("documento pdf", "").strip().strip("()")
+                        tipo_part = inner if inner else tipo_part
+                    if tipo_part not in _EXCLUDE_LABELS:
+                        nf_candidates.append(doc)
+
+                # Se todos foram excluídos, usa todos os PDFs como candidatos
+                if not nf_candidates:
+                    nf_candidates = [d for d in candidates
+                                     if d.get("mime_type") == "application/pdf"]
+
+                if nf_candidates:
+                    # Retorna o maior (NFs escaneadas são tipicamente maiores que comprovantes)
+                    return max(nf_candidates, key=lambda d: d.get("size_bytes", 0))
+            else:
+                return candidates[0]
         return None
 
     def _resolve_reference(self, ref: str, lancamento: dict) -> Any:
