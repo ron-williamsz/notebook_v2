@@ -222,15 +222,26 @@ window.Etapas = {
 
                 let detalhes = '';
                 const explicacao = Utils.escapeHtml(r.detalhes || '');
-                if (r.valores && r.valores.encontrado && r.valores.esperado) {
-                    if (explicacao && r.resultado !== 'APROVADO') {
-                        detalhes = `<span class="ci-explicacao">${explicacao}</span>`
-                            + `<span class="ci-val">Encontrado: ${Utils.escapeHtml(r.valores.encontrado)}</span>`
-                            + `<span class="ci-val-sep">→</span>`
-                            + `<span class="ci-val">Esperado: ${Utils.escapeHtml(r.valores.esperado)}</span>`;
-                    } else {
-                        detalhes = `<span class="ci-val">Encontrado: ${Utils.escapeHtml(r.valores.encontrado)}</span> <span class="ci-val-sep">→</span> <span class="ci-val">Esperado: ${Utils.escapeHtml(r.valores.esperado)}</span>`;
+                const enc = r.valores && r.valores.encontrado ? Utils.escapeHtml(r.valores.encontrado) : '';
+                const esp = r.valores && r.valores.esperado ? Utils.escapeHtml(r.valores.esperado) : '';
+
+                if (r.resultado === 'APROVADO') {
+                    // OK: mostrar apenas explicação curta
+                    detalhes = explicacao || (enc ? `${enc}` : '');
+                } else if (r.resultado === 'DIVERGENCIA' || r.resultado === 'ITEM_AUSENTE') {
+                    // Divergência: explicação em destaque + encontrado/esperado expandível
+                    if (explicacao) {
+                        detalhes = `<span class="ci-explicacao">${explicacao}</span>`;
                     }
+                    if (enc || esp) {
+                        const uid = `ci-detail-${r.lancamento}-${gId}`;
+                        detalhes += `<span class="ci-toggle" onclick="this.nextElementSibling.classList.toggle('ci-expanded')">ver detalhes</span>`
+                            + `<span class="ci-comparacao" id="${uid}">`
+                            + (enc ? `<span class="ci-val"><b>Doc:</b> ${enc}</span>` : '')
+                            + (esp ? `<span class="ci-val"><b>Hist:</b> ${esp}</span>` : '')
+                            + `</span>`;
+                    }
+                    if (!detalhes) detalhes = explicacao;
                 } else {
                     detalhes = explicacao;
                 }

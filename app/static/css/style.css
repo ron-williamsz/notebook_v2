@@ -1337,13 +1337,6 @@ mark.hist-sem-nf {
 .criterio-item-row:last-child {
     border-bottom: none;
 }
-.criterio-item-row.divergencia {
-    background: rgba(242, 139, 130, 0.04);
-}
-.criterio-item-row.ausente {
-    background: rgba(253, 214, 99, 0.04);
-}
-
 .ci-col-lanc {
     font-family: var(--font-mono);
     font-size: 0.75rem;
@@ -1382,7 +1375,52 @@ mark.hist-sem-nf {
     font-size: 0.78rem;
     color: #f0c040;
     font-weight: 500;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
+    line-height: 1.3;
+}
+.ci-toggle {
+    display: inline-block;
+    font-size: 0.68rem;
+    color: var(--primary);
+    cursor: pointer;
+    text-decoration: underline;
+    margin-top: 2px;
+}
+.ci-toggle:hover {
+    color: var(--primary-hover);
+}
+.ci-comparacao {
+    display: none;
+    margin-top: 4px;
+}
+.ci-comparacao.ci-expanded {
+    display: block;
+}
+.ci-comparacao .ci-val {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    line-height: 1.35;
+    padding: 2px 0;
+    word-break: break-word;
+}
+.ci-comparacao .ci-val b {
+    color: var(--text-secondary);
+    font-weight: 600;
+    margin-right: 4px;
+}
+.criterio-item-row.divergencia {
+    background: rgba(242, 139, 130, 0.06);
+    border-left: 3px solid var(--error);
+}
+.criterio-item-row.ausente {
+    background: rgba(253, 214, 99, 0.06);
+    border-left: 3px solid var(--warning);
+}
+.criterio-item-row.aprovado .ci-col-detail {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    opacity: 0.7;
 }
 
 /* Badges */
