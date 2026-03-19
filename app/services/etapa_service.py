@@ -67,6 +67,97 @@ class EtapaService:
     # CRUD
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _reconcile_docs_in_result(
+        result_text: str | None,
+        current_docs_by_lanc: dict[str, list[dict]],
+        current_orphan_docs: list[dict],
+        current_prestacao_source_id: int | None,
+    ) -> str | None:
+        """Reconcilia source_ids no result_text com os sources atuais da sessão.
+
+        Quando etapas subsequentes re-baixam comprovantes, os source_ids antigos
+        salvos no result_text ficam obsoletos. Este método remapeia os documentos
+        de cada lançamento (e avulsos/prestação) usando os sources atuais.
+        """
+        if not result_text:
+            return result_text
+        try:
+            data = json.loads(result_text)
+        except (json.JSONDecodeError, TypeError):
+            return result_text
+
+        lancamentos = data.get("lancamentos")
+        if not lancamentos:
+            return result_text
+
+        changed = False
+
+        # Reconcilia documentos por lançamento
+        for lanc in lancamentos:
+            num = str(lanc.get("numero_lancamento", ""))
+            if not num:
+                continue
+            new_docs = current_docs_by_lanc.get(num, [])
+            old_docs = lanc.get("documentos", [])
+            old_ids = sorted(d.get("source_id", 0) for d in old_docs)
+            new_ids = sorted(d.get("source_id", 0) for d in new_docs)
+            if old_ids != new_ids:
+                lanc["documentos"] = new_docs
+                changed = True
+
+        # Reconcilia documentos avulsos (sem nº lançamento no label)
+        old_avulsos = data.get("documentos_avulsos", [])
+        old_avulso_ids = sorted(d.get("source_id", 0) for d in old_avulsos)
+        new_avulso_ids = sorted(d.get("source_id", 0) for d in current_orphan_docs)
+        if old_avulso_ids != new_avulso_ids:
+            data["documentos_avulsos"] = current_orphan_docs
+            changed = True
+
+        # Reconcilia prestacao_source_id
+        old_prest_id = data.get("prestacao_source_id")
+        if old_prest_id != current_prestacao_source_id:
+            data["prestacao_source_id"] = current_prestacao_source_id
+            changed = True
+
+        if changed:
+            return json.dumps(data, ensure_ascii=False)
+        return result_text
+
+    async def _build_current_docs_map(self, session_id: int) -> tuple[
+        dict[str, list[dict]], list[dict], int | None
+    ]:
+        """Monta mapas de docs atuais a partir dos sources da sessão.
+
+        Returns:
+            (docs_by_lanc, orphan_docs, prestacao_source_id)
+        """
+        sources = await self.source_svc.list_by_session(session_id)
+        docs_by_lanc: dict[str, list[dict]] = {}
+        orphan_docs: list[dict] = []
+        prestacao_source_id: int | None = None
+
+        for src in sources:
+            if src.origin != "gosati":
+                continue
+            if src.mime_type == "text/plain":
+                prestacao_source_id = src.id
+                continue
+            doc_info = {
+                "source_id": src.id,
+                "label": src.label or src.filename,
+                "filename": src.filename,
+                "mime_type": src.mime_type,
+                "size_bytes": src.size_bytes,
+            }
+            m = re.search(r"Lanç\.(\d+)", src.label or "")
+            if m:
+                docs_by_lanc.setdefault(m.group(1), []).append(doc_info)
+            else:
+                orphan_docs.append(doc_info)
+
+        return docs_by_lanc, orphan_docs, prestacao_source_id
+
     async def list_by_session(self, session_id: int) -> list[dict]:
         """Lista etapas de uma sessão com dados da skill."""
         result = await self.db.execute(
@@ -75,6 +166,10 @@ class EtapaService:
             .order_by(Etapa.order)
         )
         etapas = result.scalars().all()
+
+        # Mapa de docs atuais para reconciliar source_ids obsoletos
+        docs_by_lanc, orphan_docs, prestacao_sid = await self._build_current_docs_map(session_id)
+
         out = []
         dirty = False
         for e in etapas:
@@ -92,6 +187,15 @@ class EtapaService:
                     e.updated_at = datetime.now(timezone.utc)
                     dirty = True
 
+            # Reconcilia source_ids que podem ter mudado após re-execução de etapas
+            reconciled_text = self._reconcile_docs_in_result(
+                e.result_text, docs_by_lanc, orphan_docs, prestacao_sid,
+            )
+            if reconciled_text != e.result_text:
+                e.result_text = reconciled_text
+                e.updated_at = datetime.now(timezone.utc)
+                dirty = True
+
             skill = await self.db.get(Skill, e.skill_id)
             out.append({
                 "id": e.id,
@@ -102,7 +206,7 @@ class EtapaService:
                 "skill_color": skill.color if skill else "#6366f1",
                 "order": e.order,
                 "status": e.status,
-                "result_text": e.result_text,
+                "result_text": reconciled_text,
                 "error_message": e.error_message,
                 "created_at": e.created_at.isoformat(),
                 "updated_at": e.updated_at.isoformat(),
@@ -731,11 +835,13 @@ class EtapaService:
 
                 # Remove docs órfãos (comprovantes removidos na origem)
                 if orphaned_sources:
+                    deleted_ids: set[int] = set()
                     for src in orphaned_sources:
                         logger.info(
                             "Auto-fetch: removendo doc órfão id=%s label='%s' (sessão %d)",
                             src.id, src.label, session_id,
                         )
+                        deleted_ids.add(src.id)
                         for path in [src.file_path, src.text_path]:
                             if path:
                                 try:
@@ -744,6 +850,7 @@ class EtapaService:
                                     pass
                         await self.db.delete(src)
                         session.source_count = max(0, session.source_count - 1)
+                    await self.source_svc._invalidate_etapa_source_refs(session_id, deleted_ids)
                     await self.db.commit()
                     if progress_cb:
                         progress_cb(f"Removidos {len(orphaned_sources)} comprovante(s) não mais presentes no GoSATI...")
@@ -788,11 +895,13 @@ class EtapaService:
                 "mas existem %d docs locais — removendo todos (sessão %d)",
                 len(existing_gosati_docs), session_id,
             )
+            deleted_ids: set[int] = set()
             for src in existing_gosati_docs:
                 logger.info(
                     "Auto-fetch: removendo doc órfão id=%s label='%s' (sessão %d)",
                     src.id, src.label, session_id,
                 )
+                deleted_ids.add(src.id)
                 for path in [src.file_path, src.text_path]:
                     if path:
                         try:
@@ -801,6 +910,7 @@ class EtapaService:
                             pass
                 await self.db.delete(src)
                 session.source_count = max(0, session.source_count - 1)
+            await self.source_svc._invalidate_etapa_source_refs(session_id, deleted_ids)
             await self.db.commit()
             if progress_cb:
                 progress_cb(f"Removidos {len(existing_gosati_docs)} comprovante(s) — não há mais comprovantes no GoSATI")
