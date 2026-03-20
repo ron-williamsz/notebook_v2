@@ -1,87 +1,44 @@
-"""Proxy para listar condomínios da API BD FOR ALL."""
+"""Condomínios — lista local + sincronização com BD FOR ALL."""
 import logging
-import time
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.dependencies import require_admin
+from app.models.auth_session import AuthSession
+from app.models.base import get_db
+from app.services.condominio_service import CondominioService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/condominios", tags=["Condominios"])
 
-# Cache em memória: lista completa + timestamp
-_cache: dict = {"data": [], "ts": 0}
-CACHE_TTL = 600  # 10 minutos
 
-
-async def _fetch_condominios(settings: Settings) -> list[dict]:
-    """Autentica e busca lista de condomínios da API BD FOR ALL."""
-    if not settings.bdforall_email or not settings.bdforall_senha:
-        raise HTTPException(502, "Credenciais BD FOR ALL não configuradas no .env")
-
-    base = settings.bdforall_url.rstrip("/")
-
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-        # Login
-        login_resp = await client.post(
-            f"{base}/api/auth/login",
-            params={"email": settings.bdforall_email, "senha": settings.bdforall_senha},
-        )
-        if login_resp.status_code != 200:
-            raise HTTPException(502, "Falha ao autenticar na API BD FOR ALL")
-
-        token = login_resp.json().get("access_token")
-
-        # Busca condomínios (limit alto para pegar todos)
-        resp = await client.get(
-            f"{base}/api/condominios",
-            params={"limit": 500, "status": "ativo"},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        if resp.status_code != 200:
-            raise HTTPException(502, "Falha ao buscar condomínios da API BD FOR ALL")
-
-        items = resp.json().get("data", [])
-        return [
-            {"codigo": int(c["codigo_ahreas"]), "nome": c["nome"]}
-            for c in items
-            if c.get("codigo_ahreas")
-        ]
-
-
-async def _get_cached(settings: Settings) -> list[dict]:
-    """Retorna lista cacheada, revalidando se expirado."""
-    now = time.time()
-    if _cache["data"] and (now - _cache["ts"]) < CACHE_TTL:
-        return _cache["data"]
-
-    data = await _fetch_condominios(settings)
-    _cache["data"] = data
-    _cache["ts"] = now
-    return data
+def _svc(db: AsyncSession = Depends(get_db)) -> CondominioService:
+    return CondominioService(db)
 
 
 @router.get("")
 async def list_condominios(
     busca: str = Query("", description="Filtro por código ou nome"),
-    settings: Settings = Depends(get_settings),
+    svc: CondominioService = Depends(_svc),
 ):
-    """Retorna condomínios filtrados por busca (código ou nome)."""
+    """Retorna condomínios da tabela local com contagem de notebooks."""
+    return await svc.list_all(busca=busca)
+
+
+@router.post("/sync")
+async def sync_condominios(
+    svc: CondominioService = Depends(_svc),
+    settings: Settings = Depends(get_settings),
+    _admin: AuthSession = Depends(require_admin),
+):
+    """Sincroniza condomínios da API BD FOR ALL (admin only)."""
     try:
-        condominios = await _get_cached(settings)
-    except HTTPException:
-        raise
+        result = await svc.sync_from_bdforall(settings)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
-        logger.exception("Erro ao buscar condomínios")
-        raise HTTPException(502, f"Não foi possível conectar à API BD FOR ALL: {e}")
-
-    if busca:
-        q = busca.lower()
-        condominios = [
-            c for c in condominios
-            if q in str(c["codigo"]).lower() or q in c["nome"].lower()
-        ]
-
-    condominios.sort(key=lambda c: c["codigo"])
-    return condominios
+        logger.exception("Erro ao sincronizar condomínios")
+        raise HTTPException(status_code=502, detail=f"Erro na sincronização: {e}")

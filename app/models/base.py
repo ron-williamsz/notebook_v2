@@ -42,6 +42,8 @@ async def _migrate_add_columns(conn) -> None:
         ("auth_sessions", "selected_cond_codigo", "INTEGER"),
         ("auth_sessions", "selected_cond_nome", "VARCHAR"),
         ("auth_sessions", "role", "VARCHAR DEFAULT 'user'"),
+        ("sessions", "gosati_total_despesas", "INTEGER"),
+        ("sessions", "condominio_id", "INTEGER"),
     ]
     for table, column, col_type in columns:
         try:
@@ -80,13 +82,36 @@ async def _seed_admin_roles(conn) -> None:
             pass
 
 
+async def _backfill_condominios(conn) -> None:
+    """Vincula sessions existentes à tabela condominios."""
+    try:
+        # Cria registros de condomínio a partir dos dados já existentes em sessions
+        # Agrupa por codigo (pega o primeiro nome não-nulo)
+        await conn.execute(text(
+            "INSERT OR IGNORE INTO condominios (gosati_condominio_codigo, gosati_condominio_nome, status, created_at, updated_at) "
+            "SELECT gosati_condominio_codigo, MAX(COALESCE(gosati_condominio_nome, '')), 'ativo', datetime('now'), datetime('now') "
+            "FROM sessions WHERE gosati_condominio_codigo IS NOT NULL "
+            "GROUP BY gosati_condominio_codigo"
+        ))
+        # Vincula sessions ao condomínio correspondente
+        await conn.execute(text(
+            "UPDATE sessions SET condominio_id = ("
+            "  SELECT id FROM condominios WHERE condominios.gosati_condominio_codigo = sessions.gosati_condominio_codigo"
+            ") WHERE gosati_condominio_codigo IS NOT NULL AND condominio_id IS NULL"
+        ))
+        logger.info("Backfill: condominios vinculados às sessions")
+    except Exception:
+        pass
+
+
 async def init_db():
     """Cria todas as tabelas no banco e aplica migrações."""
-    from app.models import Skill, SkillStep, SkillExample, Session, Source, ChatMessage, AuthSession, AuditLog, UserRole  # noqa: F401
+    from app.models import Skill, SkillStep, SkillExample, Condominio, Session, Source, ChatMessage, AuthSession, AuditLog, UserRole  # noqa: F401
 
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
         await _migrate_add_columns(conn)
+        await _backfill_condominios(conn)
         await _seed_admin_roles(conn)
 
 

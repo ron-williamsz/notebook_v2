@@ -93,15 +93,50 @@ window.Etapas = {
             </div>`;
         }
 
+        // Etapas concluídas começam recolhidas, as demais expandidas
+        const collapsed = etapa.status === 'done';
+        const chevron = collapsed ? '▶' : '▼';
+        const bodyHidden = collapsed ? ' hidden' : '';
+
+        // Extrai resumo de critérios para badges no header
+        let headerBadges = '';
+        if (etapa.status === 'done' && etapa.result_text) {
+            try {
+                const data = typeof etapa.result_text === 'string' ? JSON.parse(etapa.result_text) : etapa.result_text;
+                const resumo = data.criterios?.resumo;
+                if (resumo) {
+                    const div = resumo.divergencias || 0;
+                    const aus = resumo.itens_ausentes || 0;
+                    const parts = [];
+                    if (div) parts.push(`<span class="etapa-header-badge divergencia">${div} diverg.</span>`);
+                    if (aus) parts.push(`<span class="etapa-header-badge ausente">${aus} ausent.</span>`);
+                    if (!div && !aus) parts.push(`<span class="etapa-header-badge aprovado">OK</span>`);
+                    headerBadges = parts.join('');
+                }
+            } catch (e) { /* */ }
+        }
+
+        // Status: bolinha para done, texto para os demais
+        let statusHtml;
+        if (etapa.status === 'done') {
+            statusHtml = `<span class="etapa-status-dot done" title="Concluído"></span>`;
+        } else {
+            statusHtml = `<span class="etapa-card-status ${etapa.status}">${statusLabel}</span>`;
+        }
+
         return `
             <div class="etapa-card ${etapa.status}" id="etapa-card-${etapa.id}" style="border-left: 3px solid ${etapa.skill_color}">
-                <div class="etapa-card-header">
+                <div class="etapa-card-header" onclick="Etapas.toggleEtapa(${etapa.id})" style="cursor:pointer">
+                    <span class="etapa-card-chevron" id="etapa-chev-${etapa.id}">${chevron}</span>
                     <span class="etapa-card-icon">${etapa.skill_icon}</span>
                     <span class="etapa-card-title">${Utils.escapeHtml(etapa.skill_name)}</span>
-                    <span class="etapa-card-status ${etapa.status}">${statusLabel}</span>
+                    <span class="etapa-header-badges">${headerBadges}</span>
+                    ${statusHtml}
                 </div>
-                ${bodyHtml}
-                ${actionsHtml}
+                <div class="etapa-card-content${bodyHidden}" id="etapa-content-${etapa.id}">
+                    ${bodyHtml}
+                    ${actionsHtml}
+                </div>
             </div>`;
     },
 
@@ -143,15 +178,15 @@ window.Etapas = {
 
         let html = `
             <div class="criterios-resumo">
-                <div class="criterio-stat aprovado">
+                <div class="criterio-stat aprovado criterio-filter" data-filter="APROVADO" onclick="Etapas.filterByStatus(this, '${etapaId}')">
                     <span class="criterio-stat-num">${aprovados}</span>
                     <span class="criterio-stat-label">Aprovados</span>
                 </div>
-                <div class="criterio-stat divergencia">
+                <div class="criterio-stat divergencia criterio-filter" data-filter="DIVERGENCIA" onclick="Etapas.filterByStatus(this, '${etapaId}')">
                     <span class="criterio-stat-num">${divergencias}</span>
                     <span class="criterio-stat-label">Divergências</span>
                 </div>
-                <div class="criterio-stat ausente">
+                <div class="criterio-stat ausente criterio-filter" data-filter="ITEM_AUSENTE" onclick="Etapas.filterByStatus(this, '${etapaId}')">
                     <span class="criterio-stat-num">${ausentes}</span>
                     <span class="criterio-stat-label">Ausentes</span>
                 </div>
@@ -251,7 +286,7 @@ window.Etapas = {
                 const valor = parseFloat(info.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
                 html += `<div class="criterio-item-row ${badgeClass}" data-resultado="${r.resultado}">
-                            <span class="ci-col-lanc">${Utils.escapeHtml(r.lancamento)}</span>
+                            <span class="ci-col-lanc ci-col-lanc-link" onclick="Etapas.goToLancamento('${etapaId}', '${Utils.escapeHtml(r.lancamento)}')">${Utils.escapeHtml(r.lancamento)}</span>
                             <span class="ci-col-hist" title="${Utils.escapeHtml(info.historico || '')}">${hist}</span>
                             <span class="ci-col-valor">R$ ${valor}</span>
                             <span class="ci-col-result"><span class="criterio-badge ${badgeClass}">${badgeLabel}</span></span>
@@ -344,6 +379,15 @@ window.Etapas = {
         if (chev) chev.textContent = isHidden ? '▼' : '▶';
     },
 
+    toggleEtapa(etapaId) {
+        const content = document.getElementById(`etapa-content-${etapaId}`);
+        const chev = document.getElementById(`etapa-chev-${etapaId}`);
+        if (!content) return;
+        const isHidden = content.classList.contains('hidden');
+        content.classList.toggle('hidden');
+        if (chev) chev.textContent = isHidden ? '▼' : '▶';
+    },
+
     toggleCriterioGrupo(gId) {
         const body = document.getElementById(`crit-body-${gId}`);
         const chev = document.getElementById(`crit-chev-${gId}`);
@@ -351,6 +395,44 @@ window.Etapas = {
         const isHidden = body.classList.contains('hidden');
         body.classList.toggle('hidden');
         if (chev) chev.textContent = isHidden ? '▼' : '▶';
+    },
+
+    filterByStatus(el, etapaId) {
+        const filter = el.dataset.filter;
+        const card = el.closest('.etapa-card') || document.getElementById(`etapa-${etapaId}`);
+        if (!card) return;
+
+        // Toggle active state
+        const isActive = el.classList.contains('filter-active');
+        card.querySelectorAll('.criterio-filter').forEach(f => f.classList.remove('filter-active'));
+
+        if (isActive) {
+            // Desfiltra — mostrar tudo
+            card.querySelectorAll('.criterio-item-row').forEach(r => r.style.display = '');
+            card.querySelectorAll('.criterio-grupo').forEach(g => g.style.display = '');
+            card.querySelectorAll('.criterio-item-header').forEach(h => h.style.display = '');
+        } else {
+            // Filtra pelo status selecionado
+            el.classList.add('filter-active');
+            card.querySelectorAll('.criterio-item-row').forEach(r => {
+                r.style.display = r.dataset.resultado === filter ? '' : 'none';
+            });
+            // Mostra/esconde grupos inteiros se não têm itens visíveis
+            card.querySelectorAll('.criterio-grupo').forEach(g => {
+                const body = g.querySelector('.criterio-grupo-body');
+                const header = g.querySelector('.criterio-grupo-header');
+                if (!body) return;
+                const visibleRows = body.querySelectorAll(`.criterio-item-row[data-resultado="${filter}"]`);
+                if (visibleRows.length === 0) {
+                    g.style.display = 'none';
+                } else {
+                    g.style.display = '';
+                    body.classList.remove('hidden');
+                    const chev = g.querySelector('.criterio-grupo-chevron');
+                    if (chev) chev.textContent = '▼';
+                }
+            });
+        }
     },
 
     _renderAnaliseSteps(steps, etapaId) {
@@ -472,6 +554,39 @@ window.Etapas = {
             return d.toLocaleDateString('pt-BR');
         } catch {
             return dateStr;
+        }
+    },
+
+    goToLancamento(etapaId, lancNum) {
+        // 1. Garante que a etapa está expandida
+        const content = document.getElementById(`etapa-content-${etapaId}`);
+        if (content && content.classList.contains('hidden')) {
+            this.toggleEtapa(parseInt(etapaId));
+        }
+
+        // 2. Abre a seção de lançamentos
+        const lancBody = document.getElementById(`lanc-sec-body-${etapaId}`);
+        if (lancBody && lancBody.classList.contains('hidden')) {
+            this.toggleSection(etapaId, 'lanc');
+        }
+
+        // 3. Encontra o lancamento pelo número
+        const lancItems = document.querySelectorAll(`#lanc-sec-body-${etapaId} .lanc-item`);
+        for (let i = 0; i < lancItems.length; i++) {
+            const numEl = lancItems[i].querySelector('.lanc-num');
+            if (numEl && numEl.textContent.includes(lancNum)) {
+                // 4. Expande os docs desse lançamento
+                const docs = document.getElementById(`lanc-docs-${etapaId}-${i}`);
+                if (docs && docs.classList.contains('hidden')) {
+                    this.toggleLanc(parseInt(etapaId), i);
+                }
+
+                // 5. Scrolla até o lançamento com highlight
+                lancItems[i].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                lancItems[i].classList.add('lanc-highlight');
+                setTimeout(() => lancItems[i].classList.remove('lanc-highlight'), 2000);
+                return;
+            }
         }
     },
 

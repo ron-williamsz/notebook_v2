@@ -37,6 +37,14 @@ class SessionService:
         session = Session(**data.model_dump())
         if session.gosati_condominio_codigo:
             session.gosati_query_type = "prestacao_contas"
+            # Vincula ao condomínio agrupador (cria se não existir)
+            from app.services.condominio_service import CondominioService
+            cond_svc = CondominioService(self.db)
+            condominio = await cond_svc.get_or_create(
+                session.gosati_condominio_codigo,
+                session.gosati_condominio_nome or "",
+            )
+            session.condominio_id = condominio.id
         self.db.add(session)
         await self.db.commit()
         await self.db.refresh(session)
@@ -46,6 +54,15 @@ class SessionService:
         session = await self.get_by_id(session_id)
         for key, value in data.model_dump().items():
             setattr(session, key, value)
+        # Atualiza FK condominio_id se o código mudou
+        if data.gosati_condominio_codigo:
+            from app.services.condominio_service import CondominioService
+            cond_svc = CondominioService(self.db)
+            condominio = await cond_svc.get_or_create(
+                data.gosati_condominio_codigo,
+                data.gosati_condominio_nome or "",
+            )
+            session.condominio_id = condominio.id
         self.db.add(session)
         await self.db.commit()
         await self.db.refresh(session)

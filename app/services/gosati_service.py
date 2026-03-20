@@ -850,18 +850,13 @@ class GoSatiService:
         if not filter_fields and not _exclude_terms:
             return data
 
-        # nome_sub_conta e nome_conta_despesas = match exato (categorias fixas)
-        # historico = substring match (texto livre)
-        _exact_fields = {"nome_sub_conta", "nome_conta_despesas"}
-
+        # Todos os campos usam substring match (contém)
         # AND entre conta e sub_conta quando ambos informados
         _has_conta = "nome_conta_despesas" in filter_fields
         _has_sub = "nome_sub_conta" in filter_fields
         _and_conta_sub = _has_conta and _has_sub
 
         def _field_matches(field: str, terms: list[str], val: str) -> bool:
-            if field in _exact_fields:
-                return val in terms
             return any(term in val for term in terms)
 
         def _excluded(d: dict) -> bool:

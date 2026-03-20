@@ -1,29 +1,6 @@
-<div class="panel-header" style="display:flex; flex-direction:column; gap:4px;">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-        <h2>Etapas</h2>
-        <div class="period-selector" style="display:flex; align-items:center; gap:6px;">
-            <select class="input" id="etapas-mes" style="width:auto; padding:4px 8px; font-size:0.8rem;">
-                <option value="">Mês</option>
-                <option value="1">Jan</option>
-                <option value="2">Fev</option>
-                <option value="3">Mar</option>
-                <option value="4">Abr</option>
-                <option value="5">Mai</option>
-                <option value="6">Jun</option>
-                <option value="7">Jul</option>
-                <option value="8">Ago</option>
-                <option value="9">Set</option>
-                <option value="10">Out</option>
-                <option value="11">Nov</option>
-                <option value="12">Dez</option>
-            </select>
-            <input type="number" class="input" id="etapas-ano" placeholder="Ano"
-                   min="2020" max="2030"
-                   style="width:70px; padding:4px 8px; font-size:0.8rem;">
-        </div>
-    </div>
-    <span class="etapas-cond-label" id="etapas-cond-label" style="font-size:0.78rem; color:var(--text-muted);"></span>
-</div>
+<!-- Refs ocultas para JS -->
+<span id="etapas-cond-label" style="display:none;"></span>
+<span id="etapas-periodo" style="display:none;"></span>
 
 <!-- Dashboard de cobertura -->
 <div class="coverage-dashboard hidden" id="coverage-dashboard">

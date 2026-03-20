@@ -13,15 +13,9 @@ window.Notebook = {
             this.session = await API.getSession(this.sessionId);
             document.getElementById('notebook-title').textContent = this.session.title;
 
-            // Restaura mês/ano e condomínio salvos na sessão
-            this._restorePeriod();
+            // Exibe período e condomínio (somente leitura)
+            this._showPeriod();
             this._showCondLabel();
-
-            // Listeners para salvar mês/ano ao alterar
-            const mesEl = document.getElementById('etapas-mes');
-            const anoEl = document.getElementById('etapas-ano');
-            if (mesEl) mesEl.addEventListener('change', () => this._savePeriod());
-            if (anoEl) anoEl.addEventListener('change', () => this._savePeriod());
 
             // Inicializa Pipeline
             Pipeline.init(this.sessionId);
@@ -39,11 +33,15 @@ window.Notebook = {
         }
     },
 
-    _restorePeriod() {
-        const mesEl = document.getElementById('etapas-mes');
-        const anoEl = document.getElementById('etapas-ano');
-        if (this.session.gosati_mes && mesEl) mesEl.value = this.session.gosati_mes;
-        if (this.session.gosati_ano && anoEl) anoEl.value = this.session.gosati_ano;
+    _showPeriod() {
+        const el = document.getElementById('etapas-periodo');
+        if (!el) return;
+        const meses = ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        const mes = this.session.gosati_mes;
+        const ano = this.session.gosati_ano;
+        if (mes && ano) {
+            el.textContent = `${meses[mes]}/${ano}`;
+        }
     },
 
     _showCondLabel() {
@@ -73,20 +71,8 @@ window.Notebook = {
         }
     },
 
-    async _savePeriod() {
-        const mes = parseInt(document.getElementById('etapas-mes').value) || null;
-        const ano = parseInt(document.getElementById('etapas-ano').value) || null;
-        try {
-            await API.saveGoSatiSelection(this.sessionId, {
-                gosati_query_type: 'prestacao_contas',
-                gosati_condominio_codigo: this.session.gosati_condominio_codigo,
-                gosati_condominio_nome: this.session.gosati_condominio_nome,
-                gosati_mes: mes,
-                gosati_ano: ano,
-            });
-        } catch (e) {
-            // silently fail
-        }
+    _savePeriod() {
+        // Período agora é definido na criação do notebook (dashboard)
     },
 };
 

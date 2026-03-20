@@ -14,7 +14,10 @@ class Session(SQLModel, table=True):
     source_count: int = Field(default=0)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    # GoSATI selection persistence
+    # FK para tabela agrupadora de condomínio
+    condominio_id: Optional[int] = Field(default=None, foreign_key="condominios.id", index=True)
+
+    # GoSATI selection persistence (mantidos como denormalizados)
     gosati_query_type: Optional[str] = Field(default=None)
     gosati_condominio_codigo: Optional[int] = Field(default=None)
     gosati_condominio_nome: Optional[str] = Field(default=None)
@@ -22,6 +25,7 @@ class Session(SQLModel, table=True):
     gosati_ano: Optional[int] = Field(default=None)
     gosati_total_despesas: Optional[int] = Field(default=None)
 
+    condominio: Optional["Condominio"] = Relationship(back_populates="sessions")
     sources: list["Source"] = Relationship(
         back_populates="session",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},

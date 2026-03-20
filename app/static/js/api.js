@@ -152,6 +152,7 @@ window.API = {
 
     // === Condomínios ===
     searchCondominios(busca)    { return this.request('GET', `/condominios?busca=${encodeURIComponent(busca)}`); },
+    syncCondominios()           { return this.request('POST', '/condominios/sync'); },
     getCondominio()             { return this.request('GET', '/auth/condominio'); },
     setCondominio(codigo, nome) { return this.request('PATCH', '/auth/condominio', { body: { codigo, nome } }); },
 

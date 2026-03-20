@@ -2,11 +2,11 @@
 import asyncio
 import logging
 
-from arq import create_pool
+from arq import create_pool, cron
 from arq.connections import RedisSettings
 
 from app.core.config import get_settings
-from app.models.base import init_db
+from app.models.base import init_db, async_session_maker
 from app.services.pipeline_service import execute_pipeline_job, execute_single_etapa_job
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
@@ -34,6 +34,22 @@ async def startup(ctx: dict) -> None:
     logger.info("Worker: pronto")
 
 
+async def sync_condominios(ctx: dict) -> str:
+    """Cron job: sincroniza condomínios com BD FOR ALL."""
+    logger.info("Worker cron: sincronizando condomínios...")
+    try:
+        from app.services.condominio_service import CondominioService
+        settings = get_settings()
+        async with async_session_maker() as db:
+            svc = CondominioService(db)
+            result = await svc.sync_from_bdforall(settings)
+        logger.info("Worker cron: sync finalizado — %s", result)
+        return f"Sync: {result['criados']} criados, {result['atualizados']} atualizados, {result['total']} total"
+    except Exception:
+        logger.exception("Worker cron: falha ao sincronizar condomínios")
+        return "Sync: falhou"
+
+
 async def shutdown(ctx: dict) -> None:
     """Cleanup do worker."""
     logger.info("Worker: encerrando...")
@@ -54,6 +70,9 @@ def _parse_redis_url(url: str) -> RedisSettings:
 class WorkerSettings:
     """Configuração do ARQ Worker."""
     functions = [run_pipeline, run_single_etapa]
+    cron_jobs = [
+        cron(sync_condominios, hour={6}, minute={0}, run_at_startup=False),
+    ]
     on_startup = startup
     on_shutdown = shutdown
     max_jobs = 4

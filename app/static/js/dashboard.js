@@ -10,7 +10,6 @@ window.Dashboard = {
         this._initTabs();
         this._initSearch();
         // Carrega sessions primeiro para que os badges estejam prontos
-        // quando a lista de condomínios for renderizada
         await this._loadSessions();
         await this._loadCondominios();
     },
@@ -50,9 +49,17 @@ window.Dashboard = {
     async _loadCondominios() {
         const loading = document.getElementById('loading-cond');
         try {
-            // Fetch all (no busca param = full list)
             this._allConds = await API.searchCondominios('');
             loading.classList.add('hidden');
+
+            if (!this._allConds.length) {
+                document.getElementById('empty-cond').classList.remove('hidden');
+                document.getElementById('empty-cond').innerHTML =
+                    '<p>Nenhum condomínio sincronizado.</p>' +
+                    '<p style="font-size:0.8rem; margin-top:4px">Use o botão "Sincronizar" nas configurações para importar condomínios do BD FOR ALL.</p>';
+                return;
+            }
+
             this._renderCondList(this._allConds);
         } catch (e) {
             loading.innerHTML = `<p style="color:var(--text-error)">Erro ao carregar condomínios: ${e.message}</p>`;
@@ -80,22 +87,12 @@ window.Dashboard = {
         }
         empty.classList.add('hidden');
 
-        // Build a map of cond_codigo -> sessions for badges
-        const sessMap = {};
-        for (const s of this._allSessions) {
-            if (s.gosati_condominio_codigo) {
-                if (!sessMap[s.gosati_condominio_codigo]) sessMap[s.gosati_condominio_codigo] = [];
-                sessMap[s.gosati_condominio_codigo].push(s);
-            }
-        }
-
         list.innerHTML = conds.map(c => {
-            const sessions = sessMap[c.codigo] || [];
-            const hasSessions = sessions.length > 0;
-            const badge = hasSessions
-                ? `<span class="cond-badge active">${sessions.length} notebook${sessions.length > 1 ? 's' : ''}</span>`
+            const count = c.session_count || 0;
+            const badge = count > 0
+                ? `<span class="cond-badge active">${count} notebook${count > 1 ? 's' : ''}</span>`
                 : '';
-            return `<div class="cond-row" data-codigo="${c.codigo}" data-nome="${Utils.escapeHtml(c.nome)}">
+            return `<div class="cond-row" data-codigo="${c.codigo}" data-nome="${Utils.escapeHtml(c.nome)}" data-id="${c.id || ''}">
                 <span class="cond-codigo">${c.codigo}</span>
                 <span class="cond-nome">${Utils.escapeHtml(c.nome)}</span>
                 ${badge}
@@ -145,19 +142,37 @@ window.Dashboard = {
         }).join('');
     },
 
-    /* ── Click on condomínio ── */
+    /* ── Click on condomínio — sempre abre modal ── */
     _onCondClick(codigo, nome) {
-        // Check if there are existing sessions for this cond
         const existing = this._allSessions.filter(s => s.gosati_condominio_codigo === codigo);
-        if (existing.length === 1) {
-            // Redirect to the only existing notebook
-            location.href = `/notebooks/${existing[0].id}`;
-            return;
-        }
-        // Show modal to pick month/year (and create new notebook)
+
         document.getElementById('create-cond-codigo').value = codigo;
         document.getElementById('create-cond-nome').value = nome;
         document.getElementById('modal-cond-name').textContent = `${codigo} — ${nome}`;
+
+        // Renderiza notebooks existentes no modal
+        const notebooksList = document.getElementById('modal-notebooks-list');
+        if (existing.length > 0) {
+            const meses = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+            notebooksList.innerHTML = existing
+                .sort((a, b) => (b.gosati_ano - a.gosati_ano) || (b.gosati_mes - a.gosati_mes))
+                .map(s => {
+                    const periodo = s.gosati_mes && s.gosati_ano
+                        ? `${meses[s.gosati_mes]}/${s.gosati_ano}`
+                        : 'Sem período';
+                    return `<div class="modal-notebook-row" onclick="location.href='/notebooks/${s.id}'">
+                        <span class="modal-notebook-periodo">${periodo}</span>
+                        <span class="modal-notebook-fontes">${s.source_count} fontes</span>
+                        <span class="modal-notebook-data">${Utils.formatDate(s.created_at)}</span>
+                        <svg class="cond-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+                    </div>`;
+                }).join('');
+            document.getElementById('modal-notebooks-section').style.display = '';
+        } else {
+            notebooksList.innerHTML = '';
+            document.getElementById('modal-notebooks-section').style.display = 'none';
+        }
 
         // Pre-fill current month - 1
         const now = new Date();
@@ -208,6 +223,21 @@ window.Dashboard = {
             location.href = `/notebooks/${session.id}`;
         } catch (e) {
             Utils.toast('Erro ao criar notebook: ' + e.message, 'error');
+        }
+    },
+
+    async syncCondominios() {
+        const btn = document.getElementById('btn-sync');
+        if (btn) btn.disabled = true;
+        Utils.toast('Sincronizando condomínios...', 'info');
+        try {
+            const result = await API.syncCondominios();
+            Utils.toast(`Sincronizado: ${result.criados} novos, ${result.atualizados} atualizados (${result.total} total)`, 'success');
+            await this._loadCondominios();
+        } catch (e) {
+            Utils.toast('Erro ao sincronizar: ' + e.message, 'error');
+        } finally {
+            if (btn) btn.disabled = false;
         }
     },
 

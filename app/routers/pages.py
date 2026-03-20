@@ -15,6 +15,7 @@ def _ctx(request: Request, auth: AuthSession, **extra) -> dict:
     return {
         "request": request,
         "user_name": auth.user_name,
+        "user_email": auth.user_email,
         "cond_codigo": auth.selected_cond_codigo,
         "cond_nome": auth.selected_cond_nome,
         "is_admin": getattr(auth, "role", "user") == "admin",
