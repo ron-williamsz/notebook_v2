@@ -65,10 +65,27 @@ async def execute_etapa(
     db: AsyncSession = Depends(get_db),
 ):
     """Enfileira execução da etapa no worker ARQ (independente do browser)."""
+    # Busca nome da skill e condomínio para enriquecer o audit log
+    from app.models.etapa import Etapa
+    from app.models.session import Session
+    from sqlmodel import select as sel
+    audit_details: dict = {"session_id": session_id}
+    try:
+        et_row = (await db.execute(sel(Etapa).where(Etapa.id == etapa_id))).scalar_one_or_none()
+        if et_row:
+            audit_details["skill_name"] = et_row.skill_name or ""
+            audit_details["skill_id"] = et_row.skill_id
+        sess_row = (await db.execute(sel(Session).where(Session.id == session_id))).scalar_one_or_none()
+        if sess_row:
+            cond_nome = sess_row.gosati_condominio_nome or ""
+            cond_cod = sess_row.gosati_condominio_codigo or ""
+            audit_details["condominio"] = f"{cond_cod} - {cond_nome}".strip(" -")
+    except Exception:
+        pass
     await log_audit(
         db, auth, "execute_skill", request,
         resource_type="etapa", resource_id=str(etapa_id),
-        details={"session_id": session_id},
+        details=audit_details,
     )
     # Limpa keys ARQ do job anterior (dedup por job_id)
     await redis.delete(

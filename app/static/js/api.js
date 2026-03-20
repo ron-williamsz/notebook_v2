@@ -293,6 +293,7 @@ window.API = {
     getAuditLogs(params)       { return this.request('GET', '/audit?' + new URLSearchParams(params)); },
     getAuditCounters(period)   { return this.request('GET', `/audit/counters?period=${period}`); },
     getAuditUsers(period)      { return this.request('GET', `/audit/users?period=${period}`); },
+    getAuditToday()            { return this.request('GET', '/audit/today'); },
 };
 
 /**

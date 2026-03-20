@@ -4,11 +4,13 @@ import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func
+from sqlalchemy import func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.models.audit_log import AuditLog
+
+_BRT = ZoneInfo("America/Sao_Paulo")
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +105,79 @@ class AuditService:
                 "user_email": r[0],
                 "user_name": r[1],
                 "total_actions": r[2],
-                "last_action": r[3].replace(tzinfo=timezone.utc).astimezone(ZoneInfo("America/Sao_Paulo")).isoformat() if r[3] else None,
+                "last_action": r[3].replace(tzinfo=timezone.utc).astimezone(_BRT).isoformat() if r[3] else None,
             }
             for r in result.all()
         ]
+
+    async def get_today_activity(self) -> list[dict]:
+        """Atividade de hoje agrupada por usuário com detalhes das ações."""
+        # Início do dia de hoje em BRT convertido para UTC
+        now_brt = datetime.now(_BRT)
+        start_of_day_brt = now_brt.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_utc = start_of_day_brt.astimezone(timezone.utc)
+
+        stmt = (
+            select(AuditLog)
+            .where(AuditLog.created_at >= start_utc)
+            .order_by(AuditLog.created_at.desc())
+        )
+        result = await self.db.execute(stmt)
+        logs = result.scalars().all()
+
+        # Agrupa por usuário
+        users: dict[str, dict] = {}
+        for log in logs:
+            email = log.user_email
+            if email not in users:
+                users[email] = {
+                    "user_name": log.user_name,
+                    "user_email": email,
+                    "total_actions": 0,
+                    "skills_executed": [],
+                    "pipelines": 0,
+                    "last_action": None,
+                    "actions": [],
+                }
+            u = users[email]
+            u["total_actions"] += 1
+
+            if u["last_action"] is None:
+                u["last_action"] = log.created_at.replace(tzinfo=timezone.utc).astimezone(_BRT).isoformat()
+
+            # Parse details
+            detail_str = ""
+            skill_name = ""
+            condominio = ""
+            if log.details:
+                try:
+                    d = json.loads(log.details)
+                    skill_name = d.get("skill_name", "")
+                    condominio = d.get("condominio", "")
+                    if d.get("title"):
+                        detail_str = d["title"]
+                    elif d.get("name"):
+                        detail_str = d["name"]
+                except Exception:
+                    pass
+
+            action_entry = {
+                "action": log.action,
+                "time": log.created_at.replace(tzinfo=timezone.utc).astimezone(_BRT).strftime("%H:%M"),
+                "detail": detail_str,
+                "skill_name": skill_name,
+                "condominio": condominio,
+            }
+            u["actions"].append(action_entry)
+
+            if log.action == "execute_skill" and skill_name:
+                label = f"{skill_name}"
+                if condominio:
+                    label += f" ({condominio})"
+                if label not in u["skills_executed"]:
+                    u["skills_executed"].append(label)
+
+            if log.action == "execute_pipeline":
+                u["pipelines"] += 1
+
+        return sorted(users.values(), key=lambda x: x["total_actions"], reverse=True)

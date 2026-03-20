@@ -44,9 +44,22 @@ async def start_pipeline(
     auth: AuthSession = Depends(require_auth),
 ):
     """Inicia pipeline: cria etapas para todas as skills e enfileira execução."""
+    # Busca condomínio para enriquecer o audit log
+    from app.models.session import Session
+    from sqlmodel import select as sel
+    audit_details: dict = {"session_id": session_id}
+    try:
+        sess_row = (await db.execute(sel(Session).where(Session.id == session_id))).scalar_one_or_none()
+        if sess_row:
+            cond_nome = sess_row.gosati_condominio_nome or ""
+            cond_cod = sess_row.gosati_condominio_codigo or ""
+            audit_details["condominio"] = f"{cond_cod} - {cond_nome}".strip(" -")
+    except Exception:
+        pass
     await log_audit(
         db, auth, "execute_pipeline", request,
         resource_type="session", resource_id=str(session_id),
+        details=audit_details,
     )
     svc = PipelineService(db, settings, redis)
     try:

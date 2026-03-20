@@ -27,81 +27,105 @@
 
 {% block content %}
 <div class="admin-page">
-    <div class="admin-header">
+    <div class="admin-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px">
         <h1>Auditoria</h1>
-    </div>
-
-    <!-- Counters -->
-    <div class="audit-counters" id="audit-counters">
-        <div class="audit-counter-card">
-            <span class="audit-counter-value" id="cnt-total">-</span>
-            <span class="audit-counter-label">Total</span>
-        </div>
-        <div class="audit-counter-card">
-            <span class="audit-counter-value" id="cnt-logins">-</span>
-            <span class="audit-counter-label">Logins</span>
-        </div>
-        <div class="audit-counter-card">
-            <span class="audit-counter-value" id="cnt-notebooks">-</span>
-            <span class="audit-counter-label">Notebooks</span>
-        </div>
-        <div class="audit-counter-card">
-            <span class="audit-counter-value" id="cnt-skills">-</span>
-            <span class="audit-counter-label">Skills exec.</span>
-        </div>
-        <div class="audit-counter-card">
-            <span class="audit-counter-value" id="cnt-pipelines">-</span>
-            <span class="audit-counter-label">Pipelines</span>
+        <div style="display:flex; gap:8px">
+            <button class="btn btn-outlined btn-sm" onclick="AuditPage.exportCSV('today')" title="Exportar hoje">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                CSV Hoje
+            </button>
+            <button class="btn btn-outlined btn-sm" onclick="AuditPage.exportCSV('month')" title="Exportar mês">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                CSV Mês
+            </button>
         </div>
     </div>
 
-    <!-- Filters -->
-    <div class="audit-filters">
-        <select id="filter-user" class="input" style="max-width:220px">
-            <option value="">Todos os usuários</option>
-        </select>
-        <select id="filter-action" class="input" style="max-width:180px">
-            <option value="">Todas as ações</option>
-            <option value="login">Login</option>
-            <option value="logout">Logout</option>
-            <option value="create_notebook">Criar notebook</option>
-            <option value="delete_notebook">Excluir notebook</option>
-            <option value="execute_skill">Executar skill</option>
-            <option value="execute_pipeline">Executar pipeline</option>
-            <option value="create_skill">Criar skill</option>
-            <option value="update_skill">Editar skill</option>
-            <option value="delete_skill">Excluir skill</option>
-            <option value="import_skill">Importar skill</option>
-            <option value="change_password">Alterar senha</option>
-            <option value="select_condominio">Selecionar condomínio</option>
-            <option value="change_role">Alterar role</option>
-        </select>
-        <select id="filter-period" class="input" style="max-width:120px">
-            <option value="7">7 dias</option>
-            <option value="30" selected>30 dias</option>
-            <option value="90">90 dias</option>
-        </select>
+    <!-- Tabs: Hoje / Histórico -->
+    <div class="audit-tabs" style="display:flex; gap:8px; margin-bottom:20px">
+        <button class="btn btn-sm audit-tab active" data-tab="today" onclick="AuditPage.switchTab('today')">Hoje</button>
+        <button class="btn btn-sm audit-tab" data-tab="history" onclick="AuditPage.switchTab('history')">Histórico</button>
     </div>
 
-    <!-- Active Users -->
-    <div id="active-users" class="audit-users-section" style="display:none">
-        <h3>Usuários ativos</h3>
-        <div class="audit-users-list" id="users-list"></div>
+    <!-- ═══ TAB HOJE ═══ -->
+    <div id="tab-today">
+        <div class="audit-today-summary" id="today-summary">
+            <p style="color:var(--text-muted); text-align:center; padding:30px">Carregando atividade de hoje...</p>
+        </div>
     </div>
 
-    <!-- Timeline -->
-    <div class="audit-timeline" id="audit-timeline">
-        <p style="color:var(--text-muted); text-align:center; padding:40px">Carregando...</p>
-    </div>
+    <!-- ═══ TAB HISTÓRICO ═══ -->
+    <div id="tab-history" style="display:none">
+        <!-- Counters -->
+        <div class="audit-counters" id="audit-counters">
+            <div class="audit-counter-card">
+                <span class="audit-counter-value" id="cnt-total">-</span>
+                <span class="audit-counter-label">Total</span>
+            </div>
+            <div class="audit-counter-card">
+                <span class="audit-counter-value" id="cnt-logins">-</span>
+                <span class="audit-counter-label">Logins</span>
+            </div>
+            <div class="audit-counter-card">
+                <span class="audit-counter-value" id="cnt-notebooks">-</span>
+                <span class="audit-counter-label">Notebooks</span>
+            </div>
+            <div class="audit-counter-card">
+                <span class="audit-counter-value" id="cnt-skills">-</span>
+                <span class="audit-counter-label">Skills exec.</span>
+            </div>
+            <div class="audit-counter-card">
+                <span class="audit-counter-value" id="cnt-pipelines">-</span>
+                <span class="audit-counter-label">Pipelines</span>
+            </div>
+        </div>
 
-    <div style="text-align:center; padding:16px">
-        <button class="btn btn-outlined btn-sm" id="btn-load-more" style="display:none" onclick="AuditPage.loadMore()">
-            Carregar mais
-        </button>
+        <!-- Filters -->
+        <div class="audit-filters">
+            <select id="filter-user" class="input" style="max-width:220px">
+                <option value="">Todos os usuários</option>
+            </select>
+            <select id="filter-action" class="input" style="max-width:180px">
+                <option value="">Todas as ações</option>
+                <option value="login">Login</option>
+                <option value="logout">Logout</option>
+                <option value="create_notebook">Criar notebook</option>
+                <option value="delete_notebook">Excluir notebook</option>
+                <option value="execute_skill">Executar skill</option>
+                <option value="execute_pipeline">Executar pipeline</option>
+                <option value="create_skill">Criar skill</option>
+                <option value="update_skill">Editar skill</option>
+                <option value="delete_skill">Excluir skill</option>
+                <option value="import_skill">Importar skill</option>
+                <option value="change_password">Alterar senha</option>
+                <option value="select_condominio">Selecionar condomínio</option>
+                <option value="change_role">Alterar role</option>
+            </select>
+            <select id="filter-period" class="input" style="max-width:120px">
+                <option value="7">7 dias</option>
+                <option value="30" selected>30 dias</option>
+                <option value="90">90 dias</option>
+            </select>
+        </div>
+
+        <!-- Active Users -->
+        <div id="active-users" class="audit-users-section" style="display:none">
+            <h3>Usuários ativos</h3>
+            <div class="audit-users-list" id="users-list"></div>
+        </div>
+
+        <!-- Timeline -->
+        <div class="audit-timeline" id="audit-timeline"></div>
+
+        <div style="text-align:center; padding:16px">
+            <button class="btn btn-outlined btn-sm" id="btn-load-more" style="display:none" onclick="AuditPage.loadMore()">
+                Carregar mais
+            </button>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{{ url_for('static', path='js/admin/audit.js') }}?v=2"></script>
+<script src="{{ url_for('static', path='js/admin/audit.js') }}?v=3"></script>
 {% endblock %}

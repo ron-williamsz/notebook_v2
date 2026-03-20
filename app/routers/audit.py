@@ -1,8 +1,11 @@
 """Rotas de auditoria e gestão de usuários (admin only)."""
+import csv
+import io
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -112,6 +115,73 @@ async def get_active_sessions(
         }
         for s in sessions
     ]
+
+
+@router.get("/today")
+async def get_today_activity(
+    svc: AuditService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
+):
+    """Retorna atividade de hoje agrupada por usuário."""
+    return await svc.get_today_activity()
+
+
+@router.get("/export")
+async def export_audit(
+    period: str = Query("today", regex="^(today|month)$"),
+    svc: AuditService = Depends(_svc),
+    _admin: AuthSession = Depends(require_admin),
+):
+    """Exporta relatório de auditoria em CSV."""
+    import json as _json
+
+    action_labels = {
+        "login": "Login", "logout": "Logout",
+        "create_notebook": "Criar notebook", "delete_notebook": "Excluir notebook",
+        "execute_skill": "Executar skill", "execute_pipeline": "Executar pipeline",
+        "create_skill": "Criar skill", "update_skill": "Editar skill",
+        "delete_skill": "Excluir skill", "import_skill": "Importar skill",
+        "change_password": "Alterar senha", "select_condominio": "Selecionar condomínio",
+        "change_role": "Alterar role",
+    }
+    days = 1 if period == "today" else 31
+    rows, _ = await svc.query(period_days=days, offset=0, limit=5000)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Data/Hora", "Usuário", "Email", "Ação", "Detalhe", "IP"])
+    for r in rows:
+        dt = _to_brt(r.created_at) or ""
+        label = action_labels.get(r.action, r.action)
+        detail = ""
+        if r.details:
+            try:
+                d = _json.loads(r.details)
+                parts = []
+                if d.get("skill_name"):
+                    parts.append(f"Skill: {d['skill_name']}")
+                if d.get("condominio"):
+                    parts.append(f"Cond: {d['condominio']}")
+                if d.get("title"):
+                    parts.append(d["title"])
+                if d.get("name"):
+                    parts.append(d["name"])
+                if d.get("session_id") and not parts:
+                    parts.append(f"Sessão {d['session_id']}")
+                detail = " | ".join(parts)
+            except Exception:
+                detail = r.details
+        if not detail and r.resource_id:
+            detail = f"{r.resource_type} #{r.resource_id}"
+        writer.writerow([dt, r.user_name, r.user_email, label, detail, r.ip_address or ""])
+
+    buf.seek(0)
+    filename = f"auditoria_{period}_{datetime.now(_BRT).strftime('%Y%m%d_%H%M')}.csv"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # --- User Roles Management ---
