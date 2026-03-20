@@ -9,7 +9,10 @@ window.Dashboard = {
     async init() {
         this._initTabs();
         this._initSearch();
-        await Promise.all([this._loadCondominios(), this._loadSessions()]);
+        // Carrega sessions primeiro para que os badges estejam prontos
+        // quando a lista de condomínios for renderizada
+        await this._loadSessions();
+        await this._loadCondominios();
     },
 
     /* ── Tabs ── */
